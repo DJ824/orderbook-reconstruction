@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <map>
 #include <unordered_map>
+#include <boost/functional/hash.hpp>
+#include <utility>
 #include <iterator>
 #include "order.h"
 #include "limit.h"
@@ -18,12 +20,14 @@ class orderbook {
 private:
     std::map<float, limit *, std::greater<>> bids_;
     std::map<float, limit *, std::less<>> offers_;
-    //std::unordered_map<int, limit*> LimitLookup;
-    std::map<float, limit*>::iterator best_bid_it_;
-    std::map<float, limit*>::iterator best_offer_it_;
+    //std::unordered_map<std::pair<float, bool>, limit*> limit_lookup_;
+    std::unordered_map<std::pair<float, bool>, limit*, boost::hash<std::pair<float, bool>>> limit_lookup_;
+
+    //std::map<float, limit*>::iterator best_bid_it_;
+    //std::map<float, limit*>::iterator best_offer_it_;
     uint64_t bid_count_;
     uint64_t ask_count_;
-    limit_pool limit_pool_;
+    //limit_pool limit_pool_;
 
 
 public:
@@ -44,8 +48,8 @@ public:
     bool contains_order(uint64_t id);
     order* get_order(uint64_t id);
     limit* get_or_insert_limit(bool side, float price);
-    void update_best_bid();
-    void update_best_offer();
+    //void update_best_bid();
+   // void update_best_offer();
 
 };
 

@@ -5,9 +5,9 @@
 #include "orderbook.h"
 
 
-orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_pool_() {
-    best_bid_it_ = bids_.begin();
-    best_offer_it_ = offers_.begin();
+orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_lookup_()  {
+    //best_bid_it_ = bids_.begin();
+    //best_offer_it_ = offers_.begin();
     bid_count_ = 0;
     ask_count_ = 0;
 };
@@ -15,6 +15,8 @@ orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_pool_() {
 void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
     order *new_order = new order(id, price, size, side, unix_time);
     limit* curr_limit = nullptr;
+    curr_limit = get_or_insert_limit(side, price);
+    /*
     if (side) {
         if (price == best_bid_it_->first) {
             curr_limit = best_bid_it_->second;
@@ -28,6 +30,7 @@ void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool si
             curr_limit = get_or_insert_limit(side, price);
         }
     }
+    */
     order_lookup_[id] = new_order;
     curr_limit->add_order(new_order);
     curr_limit->price_ = price;
@@ -38,8 +41,8 @@ void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool si
     }
     std::cout << "added limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 
-    update_best_bid();
-    update_best_offer();
+    //update_best_bid();
+    //update_best_offer();
 }
 
 void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side) {
@@ -53,7 +56,8 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
         } else {
             offers_.erase(price);
         }
-        limit_pool_.release_limit(curr_limit);
+        std::pair<float, bool> key = std::make_pair(price, side);
+        limit_lookup_.erase(key);
         target->parent_ = nullptr;
     }
 
@@ -64,8 +68,8 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
     }
     delete target;
 
-    update_best_bid();
-    update_best_offer();
+   // update_best_bid();
+    //update_best_offer();
 
 
     std::cout << "cancelled limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
@@ -94,7 +98,8 @@ void orderbook::modify_order(uint64_t id, float new_price, uint32_t new_size, bo
             } else {
                 offers_.erase(prev_price);
             }
-            limit_pool_.release_limit(prev_limit);
+            std::pair<float, bool> key = std::make_pair(prev_price, side);
+            limit_lookup_.erase(key);
         }
         limit *new_limit = get_or_insert_limit(side, new_price);
         target->size = new_size;
@@ -113,8 +118,8 @@ void orderbook::modify_order(uint64_t id, float new_price, uint32_t new_size, bo
     std::cout << "modified order with id: " << id << std::endl;
     std::cout << "old price: " << prev_price << " new price: " << target->price_ << std::endl;
     std::cout << "old size: " << prev_size << " new size: " << target->size << std::endl;
-    update_best_bid();
-    update_best_offer();
+   // update_best_bid();
+    //update_best_offer();
 }
 
 
@@ -194,33 +199,32 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
 
         }
     }
-    update_best_bid();
-    update_best_offer();
+    //update_best_bid();
+    //update_best_offer();
 }
 
 
 limit *orderbook::get_or_insert_limit(bool side, float price) {
-    if (side) {
-        limit* curr = bids_[price];
-        if (curr == nullptr) {
-           limit* new_limit = limit_pool_.acquire_limit(price);
-           bids_[price] = new_limit;
-           return new_limit;
-        } else return curr;
-    } else {
-        limit* curr = offers_[price];
-        if (curr == nullptr) {
-            limit* new_limit = limit_pool_.acquire_limit(price);
+    std::pair<float, bool> key = std::make_pair(price, side);
+    auto it = limit_lookup_.find(key);
+    if (it == limit_lookup_.end()) {
+        limit* new_limit = new limit(price);
+        if (side) {
+            bids_[price] = new_limit;
+            //update_best_bid();
+        } else {
             offers_[price] = new_limit;
-            return new_limit;
-        } else return curr;
+            //update_best_offer();
+        }
+        limit_lookup_[key] = new_limit;
+        return new_limit;
+    } else {
+        return it->second;
     }
 
-    update_best_bid();
-    update_best_offer();
 }
 
-
+/*
 void orderbook::update_best_bid() {
     if (!bids_.empty()) {
         best_bid_it_ = bids_.begin();
@@ -232,6 +236,7 @@ void orderbook::update_best_offer()  {
         best_offer_it_ = offers_.begin();
     }
 }
+ */
 
 float orderbook::get_best_bid_price() { return bids_[0]->price_; }
 
