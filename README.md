@@ -51,10 +51,10 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 <img width="826" alt="image" src="https://github.com/user-attachments/assets/492688c4-a31f-4428-9119-c7b9a8b383b8">
 
 ## Future Plans 
-- gui to visualize the book 
-- backtesting framework to test hft strats
-- add support for multiple instruments like nq, zn, can have seperate message streams for each and a central orderbook class, have one thread on each book maybe
-
+- Gui to visualize the book 
+- Gacktesting framework to test hft strats
+- Add support for multiple instruments like nq, zn, can have seperate message streams for each and a central orderbook class, have one thread on each book maybe
+- Matching engine, curently these messages are transmitted by the CME after the customer messages have been processed by their engine. The customer messages also inlcude stop orders, specifically market stop and limit stop. Limit stops only populate the book once the best bid/ask have reached the price of the stop. Then they are added to the doubly linked list of order objects at that price. We would need another 2 unordered_map<float, order*> that include the stop orders, then every iteration of the book we check the best bid/ask and push the orders onto the appropriate price. Handling order matching should be relatively simple, as one cannot submit a limit order above the best bid/ask, it would simply turn into a market order. 
 
 
 
