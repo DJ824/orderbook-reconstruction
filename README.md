@@ -32,7 +32,7 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 ### Modify Order
 - Function: `modify_order(uint64_t id, float new_price, uint32_t new_size, bool side, uint64_t unix_time)`
 - Time Complexity: O(1) average case, O(log n) worst case when creating or removing a limit
-- Description: Modifies an existing order in the orderbook.
+- Description: Modifies an existing order in the orderbook. If quantity has been increased or if price has changed, reques the order. 
 
 ### Trade Order
 - Function: `trade_order(uint64_t id, float price, uint32_t size, bool side)`
