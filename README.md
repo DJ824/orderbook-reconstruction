@@ -36,7 +36,7 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 
 ### Trade Order
 - Function: `trade_order(uint64_t id, float price, uint32_t size, bool side)`
-- Time Complexity: O(m), where m is the number of orders that need to be filled
+- Time Complexity: O(1) (accessing the limit object being executed on) + O(m) (number of orders to be filled)
 - Description: Executes a market order. 
 
 ## Data Structures Used
