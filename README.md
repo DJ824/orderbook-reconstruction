@@ -1,6 +1,6 @@
 # High-Performance Orderbook 
 
-This project implements a high-performance orderbook suitable for algorithmic trading applications. The orderbook efficiently manages buy (bid) and sell (offer) orders, supporting operations like adding, modifying, and removing orders, as well as executing trades. This orderbook was built to process MBO data from databento.
+This project implements a high-performance orderbook suitable for algorithmic trading applications. The orderbook efficiently manages buy (bid) and sell (offer) orders, supporting operations like adding, modifying, and removing orders, as well as executing trades. This orderbook was built to process MBO data from databento, specifically for sp500 futures (spooz baby!)
 
 ## Implementation Details 
 
