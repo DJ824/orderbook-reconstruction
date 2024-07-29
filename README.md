@@ -14,8 +14,8 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 ## Key Components
 
 1. `order`: Represents individual orders in the orderbook.
-2. `limit`: Represents a price level, containing orders at that price.
-3. `orderbook`: The main class that manages the entire orderbook structure.
+2. `limit`: Represents a price level, containing a doubly linked list orders at that price.
+3. `orderbook`: The main class that manages the entire orderbook structure. Includes maps for bid and ask side, as well as order lookup and limit lookup maps. 
 
 ## Orderbook Operations and Time Complexities
 
