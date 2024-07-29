@@ -39,21 +39,6 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 - Time Complexity: O(m), where m is the number of orders that need to be filled
 - Description: Executes a market order. 
 
-### Get Best Bid/Ask
-- Functions: `get_best_bid()`, `get_best_ask()`
-- Time Complexity: O(1)
-- Description: Returns the best (highest) bid or (lowest) ask price level.
-
-### Get Best Bid/Ask Price
-- Functions: `get_best_bid_price()`, `get_best_ask_price()`
-- Time Complexity: O(1)
-- Description: Returns the price of the best bid or ask.
-
-### Get Order Count
-- Function: `get_count()`
-- Time Complexity: O(1)
-- Description: Returns the total number of orders in the orderbook.
-
 ## Data Structures Used
 
 - `std::map<float, limit*, std::greater<>>`: For storing bid price levels
