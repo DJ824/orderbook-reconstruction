@@ -47,8 +47,9 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 - `std::unordered_map<std::pair<float, bool>, limit*, boost::hash<std::pair<float, bool>>>`: For O(1) access to limit objects
 
 ## Performance 
-- process 8.2 million messages in ~4 seconds on M1 Max 32gb
-<img width="826" alt="image" src="https://github.com/user-attachments/assets/492688c4-a31f-4428-9119-c7b9a8b383b8">
+- process 8.2 million messages in ~2.7 seconds on M1 Max 32gb
+<img width="529" alt="image" src="https://github.com/user-attachments/assets/7d1d7624-f440-4297-bd78-bc0218d460f9">
+
 
 ## Future Plans 
 - Gui to visualize the book 
