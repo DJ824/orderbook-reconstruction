@@ -50,6 +50,12 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 - process 8.2 million messages in ~2.7 seconds on M1 Max 32gb
 <img width="529" alt="image" src="https://github.com/user-attachments/assets/7d1d7624-f440-4297-bd78-bc0218d460f9">
 
+- Clion has a pretty cool profiling tool, which I used to optimize the performance.
+- <img width="923" alt="image" src="https://github.com/user-attachments/assets/f483cfaf-81fe-4103-856b-de2130ac2f45">
+- We see here that dynamically allocating new orders in the add limit order function takes up a considerable amount of time, with this implementation the performance was around 5 seconds. I implemented an order pool, preallocating 1000000 orders in a vector, and by integrating it, was able to shave almost 50%, which I thought was pretty neat.
+
+
+
 
 ## Future Plans 
 - Gui to visualize the book 
