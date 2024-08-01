@@ -34,6 +34,7 @@ private:
 
 public:
     orderbook();
+    ~orderbook();
     std::unordered_map<uint64_t, order *> order_lookup_;
 
 

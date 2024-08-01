@@ -5,25 +5,33 @@
 #include "../include/orderbook.h"
 
 
-orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(100000)  {
+orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000)  {
     //best_bid_it_ = bids_.begin();
     //best_offer_it_ = offers_.begin();
     bid_count_ = 0;
     ask_count_ = 0;
 };
 
+orderbook::~orderbook() {
+    for (auto& pair : bids_) {
+        delete pair.second;
+    }
+    for (auto& pair : offers_) {
+        delete pair.second;
+    }
+}
+
 void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
-    order *new_order = new order(id, price, size, side, unix_time);
-    /*
+    //order *new_order = new order(id, price, size, side, unix_time);
+
     order* new_order = order_pool_.get_order();
     new_order->id_ = id;
     new_order->price_ = price;
     new_order->size = size;
     new_order->side_ = side;
     new_order->unix_time_ = unix_time;
-    */
-    limit* curr_limit = nullptr;
-    curr_limit = get_or_insert_limit(side, price);
+
+    limit* curr_limit = get_or_insert_limit(side, price);
     order_lookup_[id] = new_order;
     curr_limit->add_order(new_order);
     //curr_limit->price_ = price;
@@ -59,9 +67,9 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
     } else {
         --ask_count_;
     }
-    delete target;
+    //delete target;
 
-    //order_pool_.return_order(target);
+    order_pool_.return_order(target);
 
    // update_best_bid();
     //update_best_offer();
@@ -125,9 +133,7 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
         if (offers_.empty()) {
             return;
         }
-
         auto trade_limit = get_or_insert_limit(false, price);
-
         auto offer_it = trade_limit->head_;
         while (offer_it != nullptr) {
             if (size == offer_it->size) {
@@ -165,14 +171,11 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
                 offer_it = offer_it->next_;
             }
         }
-
     } else {
         if (bids_.empty()) {
             return;
         }
-
         auto trade_limit = get_or_insert_limit(true, price);
-
         auto bid_it = trade_limit->head_;
         while (bid_it != nullptr) {
             if (size == bid_it->size) {
@@ -214,7 +217,6 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
     //update_best_offer();
 }
 
-
 limit *orderbook::get_or_insert_limit(bool side, float price) {
     std::pair<float, bool> key = std::make_pair(price, side);
     auto it = limit_lookup_.find(key);
@@ -232,7 +234,6 @@ limit *orderbook::get_or_insert_limit(bool side, float price) {
     } else {
         return it->second;
     }
-
 }
 
 /*

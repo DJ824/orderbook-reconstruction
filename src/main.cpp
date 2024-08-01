@@ -12,8 +12,10 @@ int main() {
     int remove_messages = 0;
     int modify_messages = 0;
     int trade_messages = 0;
+    int count = 0;
 
     for (const auto &msg: p.message_stream) {
+        ++count;
         switch (msg.action_) {
             case 'A':
                 book.add_limit_order(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
@@ -46,4 +48,5 @@ int main() {
     std::cout << "number of trade messages processed: " << trade_messages << std::endl;
     std::cout << "total number of messages processed: "
               << modify_messages + add_messages + remove_messages + trade_messages << std::endl;
+
 }
