@@ -18,6 +18,8 @@ public:
     uint32_t num_orders_;
     order* head_;
     order* tail_;
+    uint64_t total_volume() { return volume_; }
+    bool side_;
 
     void add_order(order* new_order);
     void remove_order(order* target);

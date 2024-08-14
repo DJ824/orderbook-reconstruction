@@ -19,8 +19,6 @@
 
 class orderbook {
 private:
-    std::map<float, limit *, std::greater<>> bids_;
-    std::map<float, limit *, std::less<>> offers_;
     //std::unordered_map<std::pair<float, bool>, limit*> limit_lookup_;
     std::unordered_map<std::pair<float, bool>, limit*, boost::hash<std::pair<float, bool>>> limit_lookup_;
     order_pool order_pool_;
@@ -35,7 +33,7 @@ private:
 public:
     orderbook();
     ~orderbook();
-    std::unordered_map<uint64_t, order *> order_lookup_;
+    std::unordered_map<uint64_t , order* > order_lookup_;
 
 
     void add_limit_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time);
@@ -54,6 +52,9 @@ public:
     //void update_best_bid();
    // void update_best_offer();
 
+    std::atomic<uint64_t> message_count_{0};
+    std::map<float, limit *, std::less<>> offers_;
+    std::map<float, limit *, std::greater<>> bids_;
 };
 
 

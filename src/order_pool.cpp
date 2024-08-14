@@ -11,7 +11,6 @@ order_pool::order_pool(size_t initial_size) {
         pool.push_back(std::make_unique<order>());
         available_orders.push_back(pool.back().get());
     }
-
 }
 
 order *order_pool::get_order() {
@@ -19,9 +18,9 @@ order *order_pool::get_order() {
         pool.push_back(std::make_unique<order>());
         return pool.back().get();
     }
-    order* ord = available_orders.back();
+    order* order = available_orders.back();
     available_orders.pop_back();
-    return ord;
+    return order;
 }
 
 void order_pool::return_order(order *order) {

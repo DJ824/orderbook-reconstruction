@@ -1,13 +1,16 @@
-
 #include <chrono>
-#include "../include/orderbook.h"
+#include "../include/database.h"
 #include "../include/parser.h"
+
 
 int main() {
     orderbook book;
+    orderbook_database db("orderbook.db", book);
     parser p("modified_esm4_mbo.csv");
     p.parse();
+
     auto start = std::chrono::high_resolution_clock::now();
+
     int add_messages = 0;
     int remove_messages = 0;
     int modify_messages = 0;
@@ -18,22 +21,26 @@ int main() {
         ++count;
         switch (msg.action_) {
             case 'A':
-                book.add_limit_order(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
+                db.add_limit_order_db(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
                 ++add_messages;
                 break;
             case 'C':
-                book.remove_order(msg.id_, msg.price_, msg.size_, msg.side_);
+                db.remove_order_db(msg.id_, msg.price_, msg.size_, msg.side_);
                 ++remove_messages;
                 break;
             case 'M':
-                book.modify_order(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
+                db.modify_order_db(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
                 ++modify_messages;
                 break;
             case 'T':
-                book.trade_order(msg.id_, msg.price_, msg.size_, msg.side_);
+                db.trade_order_db(msg.id_, msg.price_, msg.size_, msg.side_);
                 ++trade_messages;
                 break;
         }
+        if (count == 1000000) {
+            break;
+        }
+
     }
 
     auto end = std::chrono::high_resolution_clock::now();

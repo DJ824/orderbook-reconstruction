@@ -6,10 +6,12 @@
 
 
 orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000)  {
-    //best_bid_it_ = bids_.begin();
-    //best_offer_it_ = offers_.begin();
     bid_count_ = 0;
     ask_count_ = 0;
+
+    bids_.get_allocator().allocate(200);
+    offers_.get_allocator().allocate(200);
+    order_lookup_.reserve(1000000);
 };
 
 orderbook::~orderbook() {
@@ -41,9 +43,6 @@ void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool si
         ++ask_count_;
     }
    // std::cout << "added limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
-
-    //update_best_bid();
-    //update_best_offer();
 }
 
 void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side) {
@@ -70,10 +69,6 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
     //delete target;
 
     order_pool_.return_order(target);
-
-   // update_best_bid();
-    //update_best_offer();
-
 
     //std::cout << "cancelled limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
@@ -123,8 +118,6 @@ void orderbook::modify_order(uint64_t id, float new_price, uint32_t new_size, bo
     std::cout << "old price: " << prev_price << " new price: " << target->price_ << std::endl;
     std::cout << "old size: " << prev_size << " new size: " << target->size << std::endl;
      */
-   // update_best_bid();
-    //update_best_offer();
 }
 
 
@@ -213,8 +206,6 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
             }
         }
     }
-    //update_best_bid();
-    //update_best_offer();
 }
 
 limit *orderbook::get_or_insert_limit(bool side, float price) {
@@ -224,9 +215,11 @@ limit *orderbook::get_or_insert_limit(bool side, float price) {
         limit* new_limit = new limit(price);
         if (side) {
             bids_[price] = new_limit;
+            new_limit->side_ = true;
             //update_best_bid();
         } else {
             offers_[price] = new_limit;
+            new_limit->side_ = false;
             //update_best_offer();
         }
         limit_lookup_[key] = new_limit;
@@ -235,20 +228,6 @@ limit *orderbook::get_or_insert_limit(bool side, float price) {
         return it->second;
     }
 }
-
-/*
-void orderbook::update_best_bid() {
-    if (!bids_.empty()) {
-        best_bid_it_ = bids_.begin();
-    }
-}
-
-void orderbook::update_best_offer()  {
-    if (!offers_.empty()) {
-        best_offer_it_ = offers_.begin();
-    }
-}
- */
 
 float orderbook::get_best_bid_price() { return bids_[0]->price_; }
 
