@@ -28,7 +28,7 @@ int main() {
 
     for (const auto &msg: p.message_stream) {
         ++count;
-        if (count == 30000) {
+        if (count == 300000) {
             break;
         }
 

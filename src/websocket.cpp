@@ -41,7 +41,7 @@ public:
     void stop() {
         ws_server.stop_listening();
         for (auto& con : connections) {
-            ws_server.close(con, websocketpp::close::status::going_away, "Server shutdown");
+            ws_server.close(con, websocketpp::close::status::going_away, "server shutdown");
         }
         ws_server.stop();
     }
