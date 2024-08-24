@@ -65,4 +65,4 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 
 
 ## Visualization 
-https://www.youtube.com/watch?v=skqBuDF8bKk
+https://www.youtube.com/watch?v=7R3gXHS7DdI
