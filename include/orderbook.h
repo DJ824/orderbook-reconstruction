@@ -15,6 +15,7 @@
 #include "limit.h"
 #include "limit_pool.h"
 #include "order_pool.h"
+#include "../src/database.cpp"
 
 
 class orderbook {
@@ -28,10 +29,11 @@ private:
     uint64_t bid_count_;
     uint64_t ask_count_;
     //limit_pool limit_pool_;
+    DatabaseManager &db_manager_;
 
 
 public:
-    orderbook();
+    orderbook(DatabaseManager& db_manager);
     ~orderbook();
     std::unordered_map<uint64_t , order* > order_lookup_;
 

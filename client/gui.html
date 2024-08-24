@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orderbook Display</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+        #orderbook {
+            width: 100%;
+            max-width: 400px;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+        #orderbook th, #orderbook td {
+            padding: 5px;
+            text-align: right;
+            border: 1px solid #333;
+        }
+        #orderbook th {
+            background-color: #333;
+        }
+        .bid {
+            color: #4CAF50;
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+        .ask {
+            color: #F44336;
+            background-color: rgba(244, 67, 54, 0.1);
+        }
+        .spread {
+            background-color: #FFA000;
+            color: #000;
+        }
+        .price {
+            text-align: center;
+            font-weight: bold;
+        }
+        #debug {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border: 1px solid #555;
+        }
+    </style>
+</head>
+<body>
+<table id="orderbook">
+    <thead>
+    <tr>
+        <th>Bid</th>
+        <th>Price</th>
+        <th>Ask</th>
+    </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+<div id="debug"></div>
+
+<script>
+    const socket = new WebSocket('ws://localhost:9002');
+    let orderbookData = {
+        bids: {},
+        asks: {}
+    };
+
+    function log(message) {
+        console.log(message);
+        const debugElement = document.getElementById('debug');
+        debugElement.innerHTML += message + '<br>';
+        debugElement.scrollTop = debugElement.scrollHeight;
+    }
+
+    socket.onopen = function(e) {
+        log("Connected to WebSocket server");
+    };
+
+    socket.onmessage = function(event) {
+        log("Received data: " + event.data);
+        try {
+            const data = JSON.parse(event.data);
+            orderbookData = data;
+
+            log("Parsed data: " + JSON.stringify(orderbookData));
+            updateOrderbookDisplay();
+        } catch (error) {
+            log("Error parsing data: " + error);
+        }
+    };
+
+    socket.onclose = function(event) {
+        if (event.wasClean) {
+            log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+        } else {
+            log('Connection died');
+        }
+    };
+
+    socket.onerror = function(error) {
+        log(`WebSocket error: ${error.message}`);
+    };
+
+    function updateOrderbookDisplay() {
+        const tbody = document.querySelector('#orderbook tbody');
+        tbody.innerHTML = '';
+
+        orderbookData.asks.forEach(ask => {
+            const row = createRow(ask.price, ask.volume, false);
+            tbody.appendChild(row);
+        });
+
+        orderbookData.bids.forEach(bid => {
+            const row = createRow(bid.price, bid.volume, true);
+            tbody.appendChild(row);
+        });
+
+        log("Updated orderbook display without sorting");
+    }
+
+    function createRow(price, volume, isBid) {
+        const row = document.createElement('tr');
+        const bidCell = document.createElement('td');
+        const priceCell = document.createElement('td');
+        const askCell = document.createElement('td');
+
+        priceCell.textContent = parseFloat(price).toFixed(2);
+        priceCell.classList.add('price');
+
+        if (isBid) {
+            bidCell.textContent = volume;
+            bidCell.classList.add('bid');
+        } else {
+            askCell.textContent = volume;
+            askCell.classList.add('ask');
+        }
+
+        row.appendChild(bidCell);
+        row.appendChild(priceCell);
+        row.appendChild(askCell);
+        return row;
+    }
+
+    // Initial update
+    updateOrderbookDisplay();
+</script>
+</body>
+</html>

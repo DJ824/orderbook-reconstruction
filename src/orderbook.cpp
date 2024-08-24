@@ -5,7 +5,8 @@
 #include "../include/orderbook.h"
 
 
-orderbook::orderbook() : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000)  {
+
+orderbook::orderbook(DatabaseManager& db_manager) : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000), db_manager_(db_manager)  {
     bid_count_ = 0;
     ask_count_ = 0;
 
@@ -42,7 +43,9 @@ void orderbook::add_limit_order(uint64_t id, float price, uint32_t size, bool si
     } else {
         ++ask_count_;
     }
-   // std::cout << "added limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
+    db_manager_.add_order(id, price, size, side, unix_time);
+
+    // std::cout << "added limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
 
 void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side) {
@@ -69,6 +72,8 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
     //delete target;
 
     order_pool_.return_order(target);
+    db_manager_.remove_order(id);
+
 
     //std::cout << "cancelled limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
@@ -118,6 +123,9 @@ void orderbook::modify_order(uint64_t id, float new_price, uint32_t new_size, bo
     std::cout << "old price: " << prev_price << " new price: " << target->price_ << std::endl;
     std::cout << "old size: " << prev_size << " new size: " << target->size << std::endl;
      */
+    db_manager_.modify_order(id, new_price, new_size, unix_time);
+
+
 }
 
 

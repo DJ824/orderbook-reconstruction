@@ -1,212 +1,197 @@
-//
-// Created by Devang Jaiswal on 8/13/24.
-//
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <memory>
+#include <chrono>
+#include <map>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstring>
+#include <nlohmann/json.hpp>
+#include "limit.h"
+#include "websocket.cpp"
 
-#include "database.h"
+class DatabaseManager {
+private:
+    std::string tcp_host;
+    int tcp_port;
+    std::unique_ptr<WebSocketServer> ws_server;
+    std::vector<std::string> batch_updates;
+    const size_t BATCH_SIZE = 20;
+    std::thread ws_thread;
 
-orderbook_database::orderbook_database(const std::string &dbName, orderbook &book)
-        : db_(dbName, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE), book_(book) {
-    create_tables();
-    prepare_statements();
-}
 
-void orderbook_database::create_tables() {
-    db_.exec("CREATE TABLE IF NOT EXISTS orders ("
-             "id INTEGER PRIMARY KEY,"
-             "price REAL,"
-             "size INTEGER,"
-             "side BOOLEAN,"
-             "unix_time INTEGER,"
-             "limit_price REAL)");
-
-    db_.exec("CREATE TABLE IF NOT EXISTS limits ("
-             "price REAL,"
-             "side BOOLEAN,"
-             "volume INTEGER,"
-             "order_count INTEGER,"
-             "PRIMARY KEY (price, side))");
-}
-
-void orderbook_database::prepare_statements()  {
-    insert_order_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "INSERT OR REPLACE INTO orders (id, price, size, side, unix_time, limit_price) "
-                                                           "VALUES (?, ?, ?, ?, ?, ?)");
-
-    update_order_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "UPDATE orders SET price = ?, size = ?, unix_time = ?, limit_price = ? "
-                                                           "WHERE id = ?");
-
-    delete_order_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "DELETE FROM orders WHERE id = ?");
-
-    insert_limit_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "INSERT OR REPLACE INTO limits (price, side, volume, order_count) "
-                                                           "VALUES (?, ?, ?, ?)");
-
-    update_limit_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "UPDATE limits SET volume = ?, order_count = ? "
-                                                           "WHERE price = ? AND side = ?");
-
-    delete_limit_stmt_ = std::make_unique<SQLite::Statement>(db_,
-                                                           "DELETE FROM limits WHERE price = ? AND side = ?");
-}
-
-void orderbook_database::add_limit_order_db(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
-    book_.add_limit_order(id, price, size, side, unix_time);
-
-    const order* new_order = book_.order_lookup_[id];
-    save_order(new_order);
-    save_limit(new_order->parent_);
-}
-
-void orderbook_database::remove_order_db(uint64_t id, float price, uint32_t size, bool side) {
-    const order* target = book_.order_lookup_[id];
-    const limit* target_limit = target->parent_;
-
-    book_.remove_order(id, price, size, side);
-    delete_order(id);
-
-    if (target_limit->num_orders_ == 0) {
-        delete_limit(price, side);
-    } else {
-        update_limit(target_limit);
+public:
+    DatabaseManager(const std::string &host, int port) : tcp_host(host), tcp_port(port) {
+        ws_server = std::make_unique<WebSocketServer>();
+        ws_thread = std::thread([this]() {
+            this->ws_server->run(9002);
+        });
     }
-}
 
-void orderbook_database::modify_order_db(uint64_t id, float new_price, uint32_t new_size, bool side,
-                                         uint64_t unix_time) {
-    const order* target = book_.order_lookup_[id];
-    const limit* old_limit = target->parent_;
-    float old_price = target->price_;
 
-    book_.modify_order(id, new_price, new_size, side, unix_time);
+    ~ DatabaseManager() {
+        if (ws_server) {
+            ws_server->stop();
+        }
+        if (ws_thread.joinable()) {
+            ws_thread.join();
+        }
+    }
 
-    const order* updated_order = book_.order_lookup_[id];
-    update_order(updated_order);
+    void send_batch_to_database() {
+        if (batch_updates.empty()) return;
 
-    if (old_price != new_price) {
-        if (old_limit->num_orders_ == 0) {
-            delete_limit(old_price, side);
+        std::stringstream combined_update;
+        for (const auto& update : batch_updates) {
+            combined_update << update;
+        }
+        send_line_protocol_tcp(combined_update.str());
+        batch_updates.clear();
+    }
+
+    void send_line_protocol_tcp(const std::string &line_protocol) {
+        std::cout << "attempting to send line protocol: [" << line_protocol << "]" << std::endl;
+
+        int sock = 0;
+        struct sockaddr_in serv_addr;
+
+        if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+            std::cerr << "socket creation error: " << strerror(errno) << std::endl;
+            return;
+        }
+
+        int opt = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+            std::cerr << "error setting socket options: " << strerror(errno) << std::endl;
+            close(sock);
+            return;
+        }
+
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_port = htons(tcp_port);
+
+        const char *host_cstr = tcp_host.c_str();
+        if (inet_pton(AF_INET, host_cstr, &serv_addr.sin_addr) <= 0) {
+            std::cerr << "invalid address: " << tcp_host << " Error: "
+                      << strerror(errno) << std::endl;
+            close(sock);
+            return;
+        }
+
+        if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+            std::cerr << "connection failed to host: " << tcp_host << " on port: " << tcp_port << " Error: "
+                      << strerror(errno) << std::endl;
+            close(sock);
+            return;
+        }
+
+        ssize_t sent_bytes = send(sock, line_protocol.c_str(), line_protocol.length(), 0);
+        if (sent_bytes < 0) {
+            std::cerr << "error sending data: " << strerror(errno) << std::endl;
         } else {
-            update_limit(old_limit);
+            std::cout << "successfully sent data: " << line_protocol << std::endl;
         }
-        save_limit(updated_order->parent_);
-    }
-}
 
-void orderbook_database::trade_order_db(uint64_t id, float price, uint32_t size, bool side) {
-    std::vector<const limit*> affected_limits;
-    if (side) {
-        auto it = book_.offers_.lower_bound(price);
-        while (it != book_.offers_.end() && size > 0) {
-            affected_limits.push_back(it->second);
-            size -= it->second->volume_;
-            ++it;
-        }
-    } else {
-        auto it = book_.bids_.lower_bound(price);
-        while (it != book_.bids_.end() && size > 0) {
-            affected_limits.push_back(it->second);
-            size -= it->second->volume_;
-            ++it;
-        }
+        close(sock);
     }
 
-    book_.trade_order(id, price, size, side);
+    void add_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
+        std::stringstream line_protocol;
+        line_protocol << "orders price=" << price
+                      << ",size=" << size << "i"
+                      << ",side=" << (side ? "true" : "false")
+                      << ",id=" << id << "i"
+                      << ",status=\"active\""
+                      << " " << unix_time << "\n";
 
-    for (const auto* limit : affected_limits) {
-        if (limit->num_orders_ == 0) {
-            delete_limit(limit->price_, !side);
-        } else {
-            update_limit(limit);
+        send_line_protocol_tcp(line_protocol.str());
+
+    }
+
+    void remove_order(uint64_t id) {
+        uint64_t current_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::stringstream line_protocol;
+        line_protocol << "orders id=" << id << "i"
+                      << ",status=\"cancelled\""
+                      << " " << current_time << "\n";
+
+        send_line_protocol_tcp(line_protocol.str());
+
+    }
+
+    void modify_order(uint64_t id, float new_price, uint32_t new_size, uint64_t unix_time) {
+        std::stringstream line_protocol;
+        line_protocol << "orders price=" << new_price
+                      << ",size=" << new_size << "i"
+                      << ",id=" << id << "i"
+                      << ",status=\"active\""
+                      << " " << unix_time << "\n";
+
+        send_line_protocol_tcp(line_protocol.str());
+
+    }
+
+    template<typename BidCompare, typename AskCompare>
+    void update_limit_orderbook(const std::map<float, limit *, BidCompare> &bids,
+                                const std::map<float, limit *, AskCompare> &offers) {
+        uint64_t current_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+
+        nlohmann::json orderbook_update;
+        orderbook_update["timestamp"] = current_time;
+        orderbook_update["bids"] = nlohmann::json::array();
+        orderbook_update["asks"] = nlohmann::json::array();
+
+        std::vector<std::string> db_updates;
+
+        auto process_side = [&](const auto &side, const std::string &side_str, bool is_bid) {
+            int count = 0;
+            for (const auto &[price, limit_ptr] : side) {
+                if (++count > 20) break;
+
+                nlohmann::json level = {
+                        {"price", price},
+                        {"volume", limit_ptr->volume_}
+                };
+
+                if (is_bid) {
+                    orderbook_update["bids"].push_back(level);
+                } else {
+                    orderbook_update["asks"].push_back(level);
+                }
+
+                std::stringstream line_protocol;
+                line_protocol << "limit_orderbook "
+                              << "price=" << price << ",volume=" << static_cast<long>(limit_ptr->volume_)
+                              << "i,side=" << (is_bid ? "true" : "false")
+                              << " " << current_time << "\n";
+                db_updates.push_back(line_protocol.str());
+            }
+        };
+
+        process_side(bids, "bids", true);
+        process_side(offers, "asks", false);
+
+        std::sort(orderbook_update["asks"].begin(), orderbook_update["asks"].end(),
+                  [](const nlohmann::json &a, const nlohmann::json &b) {
+                      return a["price"].get<float>() > b["price"].get<float>();
+                  });
+
+        ws_server->broadcast(orderbook_update.dump());
+
+        for (const auto &update : db_updates) {
+            batch_updates.push_back(update);
+            if (batch_updates.size() >= BATCH_SIZE) {
+                send_batch_to_database();
+            }
         }
-        for (const order* o = limit->head_; o != nullptr; o = o->next_) {
-            if (o->filled_) {
-                delete_order(o->id_);
-            } else update_order(o);
+        if (!batch_updates.empty()) {
+            send_batch_to_database();
         }
     }
-}
 
-void orderbook_database::save_order(const order *order) {
-    insert_order_stmt_->bind(1, static_cast<long long>(order->id_));
-    insert_order_stmt_->bind(2, order->price_);
-    insert_order_stmt_->bind(3, static_cast<int>(order->size));
-    insert_order_stmt_->bind(4, order->side_);
-    insert_order_stmt_->bind(5, static_cast<long long>(order->unix_time_));
-    insert_order_stmt_->bind(6, order->parent_->price_);
-    insert_order_stmt_->exec();
-    insert_order_stmt_->reset();
-}
-
-void orderbook_database::update_order(const order *order) {
-    update_order_stmt_->bind(1, order->price_);
-    update_order_stmt_->bind(2, static_cast<int>(order->size));
-    update_order_stmt_->bind(3, static_cast<long long>(order->unix_time_));
-    update_order_stmt_->bind(4, order->parent_->price_);
-    update_order_stmt_->bind(5, static_cast<long long>(order->id_));
-    update_order_stmt_->exec();
-    update_order_stmt_->reset();
-}
-
-void orderbook_database::delete_order(uint64_t id) {
-    delete_order_stmt_->bind(1, static_cast<long long>(id));
-    delete_order_stmt_->exec();
-    delete_order_stmt_->reset();
-}
-
-void orderbook_database::save_limit(const limit *limit) {
-    insert_limit_stmt_->bind(1, limit->price_);
-    insert_limit_stmt_->bind(2, limit->side_);
-    insert_limit_stmt_->bind(3, static_cast<int>(limit->volume_));
-    insert_limit_stmt_->bind(4, static_cast<int>(limit->num_orders_));
-    insert_limit_stmt_->exec();
-    insert_limit_stmt_->reset();
-}
-
-void orderbook_database::update_limit(const limit *limit) {
-    update_limit_stmt_->bind(1, static_cast<int>(limit->volume_));
-    update_limit_stmt_->bind(2, static_cast<int>(limit->num_orders_));
-    update_limit_stmt_->bind(3, limit->price_);
-    update_limit_stmt_->bind(4, limit->side_);
-    update_limit_stmt_->exec();
-    update_limit_stmt_->reset();
-}
-
-void orderbook_database::delete_limit(float price, bool side) {
-    delete_limit_stmt_->bind(1, price);
-    delete_limit_stmt_->bind(2, side);
-    delete_limit_stmt_->exec();
-    delete_limit_stmt_->reset();
-}
-
-std::vector<order> orderbook_database::load_orders() {
-    std::vector<order> orders;
-    SQLite::Statement query (db_, "SELECT * FROM orders");
-    while (query.executeStep()) {
-        order target;
-        target.id_ = query.getColumn(0).getInt64();
-        target.price_ = query.getColumn(1).getDouble();
-        target.size = query.getColumn(2).getInt();
-        target.side_ = query.getColumn(3).getInt();
-        target.unix_time_ = query.getColumn(4).getInt64();
-        orders.push_back(target);
-    }
-    return orders;
-}
-
-std::vector<limit> orderbook_database::load_limits() {
-    std::vector<limit> limits;
-    SQLite::Statement query(db_, "SELECT * FROM limits");
-    while (query.executeStep()) {
-        limit target(query.getColumn(0).getDouble());
-        target.side_ = query.getColumn(1).getInt();
-        target.volume_ = query.getColumn(2).getInt();
-        target.num_orders_ = query.getColumn(3).getInt();
-        limits.push_back(target);
-    }
-    return limits;
-}
-
-
-
+};

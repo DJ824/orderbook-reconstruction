@@ -60,3 +60,4 @@ void parser::parse_line(const std::string &line) {
     message msg(order_id, ts_event, size, price, action[0], bid_or_ask);
     message_stream.push_back(msg);
 }
+
