@@ -65,4 +65,6 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 
 
 ## Visualization 
+![image](https://github.com/user-attachments/assets/40eb2ef1-c1fd-4ab7-91eb-d8ce2ba56721)
+
 https://www.youtube.com/watch?v=7R3gXHS7DdI
