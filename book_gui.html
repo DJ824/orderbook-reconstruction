@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Book GUI</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script type="module">
+        import {html, render} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+
+        const ws = new WebSocket('ws://localhost:9002');
+        const worker = new Worker('web_worker.js');
+        let orderBookData = { bids: [], asks: [] };
+        const marketOrders = [];
+        let chartData = { bidData: [], askData: [] };
+
+        ws.onopen = () => {
+            console.log('Connected to WebSocket server');
+        };
+
+        ws.onmessage = (event) => {
+            worker.postMessage(event.data);
+        };
+
+        worker.onmessage = (event) => {
+            const data = event.data;
+            if (data.bids && data.asks) {
+                orderBookData = data;
+                renderOrderBook();
+                updateChartData();
+                updateChart();
+            } else if (data.time !== undefined && data.price !== undefined && data.size !== undefined && data.side !== undefined) {
+                addMarketOrder(data);
+            }
+        };
+
+        function renderOrderBook() {
+            const template = html`
+                ${orderBookData.asks.slice(0, 20).map(ask => html`
+                    <div class="orderbook-row ask-row">
+                        <span></span>
+                        <span class="price">${ask.price.toFixed(2)}</span>
+                        <span class="ask-volume">${ask.volume.toFixed(0)}</span>
+                    </div>
+                `)}
+                <div class="orderbook-row spread-row">
+                    <span></span><span></span><span></span>
+                </div>
+                ${orderBookData.bids.slice(0, 20).map(bid => html`
+                    <div class="orderbook-row bid-row">
+                        <span class="bid-volume">${bid.volume.toFixed(0)}</span>
+                        <span class="price">${bid.price.toFixed(2)}</span>
+                        <span></span>
+                    </div>
+                `)}
+            `;
+            render(template, document.getElementById('orderbook-body'));
+        }
+
+        function addMarketOrder(order) {
+            marketOrders.unshift(order);
+            if (marketOrders.length > 20) marketOrders.pop();
+            renderMarketOrders();
+        }
+
+        function renderMarketOrders() {
+            const template = html`
+                ${marketOrders.map(order => html`
+                    <div class="market-order-row ${order.side === 'buy' ? 'buy-order' : 'sell-order'}">
+                        <span class="time">${formatUnixTime(order.time)}</span>
+                        <span class="price">${order.price.toFixed(2)}</span>
+                        <span class="size">${order.size}</span>
+                    </div>
+                `)}
+            `;
+            render(template, document.getElementById('market-orders-body'));
+        }
+
+        function formatUnixTime(unixTime) {
+            const date = new Date(unixTime);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
+            return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+        }
+
+        function updateChartData() {
+            chartData.bidData = orderBookData.bids.slice(0, 20).map(d => ({price: d.price, volume: d.volume}));
+            chartData.askData = orderBookData.asks.slice(0, 20).map(d => ({price: d.price, volume: d.volume}));
+        }
+
+        let chart, xScale, yScale, bidArea, askArea;
+
+        function initChart() {
+            const margin = { top: 20, right: 20, bottom: 30, left: 50 };
+            const width = document.querySelector('.chart-container').clientWidth - margin.left - margin.right;
+            const height = document.querySelector('.chart-container').clientHeight - margin.top - margin.bottom;
+
+            const svg = d3.select('#chart')
+                .append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            xScale = d3.scaleLinear().range([0, width]);
+            yScale = d3.scaleLinear().range([height, 0]);
+
+            const areaGenerator = d3.area()
+                .x(d => xScale(d.price))
+                .y0(height)
+                .y1(d => yScale(d.volume))
+                .curve(d3.curveStepAfter);
+
+            bidArea = svg.append("path")
+                .attr("class", "area bid-area")
+                .attr("fill", "url(#area-gradient-bid)");
+
+            askArea = svg.append("path")
+                .attr("class", "area ask-area")
+                .attr("fill", "url(#area-gradient-ask)");
+
+            svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${height})`);
+
+            svg.append("g")
+                .attr("class", "y-axis");
+
+            const defs = svg.append("defs");
+
+            const bidGradient = defs.append("linearGradient")
+                .attr("id", "area-gradient-bid")
+                .attr("gradientUnits", "userSpaceOnUse")
+                .attr("x1", 0).attr("y1", height)
+                .attr("x2", 0).attr("y2", 0);
+
+            bidGradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", "rgba(0, 116, 217, 0.1)");
+
+            bidGradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", "rgba(0, 116, 217, 0.5)");
+
+            const askGradient = defs.append("linearGradient")
+                .attr("id", "area-gradient-ask")
+                .attr("gradientUnits", "userSpaceOnUse")
+                .attr("x1", 0).attr("y1", height)
+                .attr("x2", 0).attr("y2", 0);
+
+            askGradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", "rgba(255, 65, 54, 0.1)");
+
+            askGradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", "rgba(255, 65, 54, 0.5)");
+
+            chart = { svg, width, height, areaGenerator };
+        }
+
+        function updateChart() {
+            if (!chart) initChart();
+
+            const allPrices = [...chartData.bidData, ...chartData.askData].map(d => d.price);
+            const allVolumes = [...chartData.bidData, ...chartData.askData].map(d => d.volume);
+
+            xScale.domain([d3.min(allPrices), d3.max(allPrices)]);
+            yScale.domain([0, d3.max(allVolumes)]);
+
+            chart.svg.select(".x-axis").call(d3.axisBottom(xScale).tickFormat(d => `$${d}`));
+            chart.svg.select(".y-axis").call(d3.axisLeft(yScale));
+
+            bidArea.datum(chartData.bidData).attr("d", chart.areaGenerator);
+            askArea.datum(chartData.askData).attr("d", chart.areaGenerator);
+        }
+
+        renderOrderBook();
+        renderMarketOrders();
+        updateChart();
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            max-width: 1800px;
+            height: calc(100vh - 40px);
+        }
+        .chart-container {
+            width: 50%;
+            height: 100%;
+            background-color: #111;
+            border: 1px solid #333;
+            margin-right: 20px;
+        }
+        .orderbook-container, .market-orders-container {
+            width: 25%;
+            background-color: #111;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        .market-orders-container {
+            margin-left: 20px;
+        }
+        .orderbook-header, .market-orders-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            padding: 10px;
+            background-color: #222;
+            font-weight: bold;
+            text-align: center;
+            font-size: 16px;
+        }
+        .orderbook-body, .market-orders-body {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        .orderbook-row, .market-order-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        .ask-row { background-color: rgba(255, 0, 0, 0.1); }
+        .bid-row { background-color: rgba(0, 0, 255, 0.1); }
+        .ask-volume, .sell-order { color: #ff4136; text-align: right; }
+        .bid-volume, .buy-order { color: #0074D9; text-align: left; }
+        .price { color: #ffffff; text-align: center; }
+        .time { text-align: left; }
+        .size { text-align: right; }
+        .spread-row {
+            background-color: #333;
+            border-top: 1px solid #444;
+            border-bottom: 1px solid #444;
+            padding: 5px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="chart-container" id="chart"></div>
+    <div class="orderbook-container">
+        <div class="orderbook-header">
+            <span>Bids</span>
+            <span>Price</span>
+            <span>Asks</span>
+        </div>
+        <div class="orderbook-body" id="orderbook-body"></div>
+    </div>
+    <div class="market-orders-container">
+        <div class="market-orders-header">
+            <span>Time</span>
+            <span>Price</span>
+            <span>Size</span>
+        </div>
+        <div class="market-orders-body" id="market-orders-body"></div>
+    </div>
+</div>
+</body>
+</html>
