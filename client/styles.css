@@ -1,0 +1,65 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #000;
+    color: #fff;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    height: 100vh;
+}
+.container {
+    display: flex;
+    width: 100%;
+    max-width: 1800px;
+    height: calc(100vh - 40px);
+}
+.chart-container {
+    width: 50%;
+    height: 100%;
+    background-color: #111;
+    border: 1px solid #333;
+    margin-right: 20px;
+}
+.orderbook-container, .market-orders-container {
+    width: 25%;
+    background-color: #111;
+    border: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+.market-orders-container {
+    margin-left: 20px;
+}
+.orderbook-header, .market-orders-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 10px;
+    background-color: #222;
+    font-weight: bold;
+    text-align: center;
+    font-size: 16px;
+}
+.orderbook-body, .market-orders-body {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+.orderbook-row, .market-order-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 5px 10px;
+    font-size: 14px;
+}
+.ask-row { background-color: rgba(255, 0, 0, 0.1); }
+.bid-row { background-color: rgba(0, 0, 255, 0.1); }
+.ask-volume, .sell-order { color: #ff4136; text-align: right; }
+.bid-volume, .buy-order { color: #0074D9; text-align: left; }
+.price { color: #ffffff; text-align: center; }
+.time { text-align: left; }
+.size { text-align: right; }
+.spread-row {
+    background-color: #333;
+    border-top: 1px solid #444;
+    border-bottom: 1px solid #444;
+    padding: 5px 0;
+}
