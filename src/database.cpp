@@ -4,6 +4,11 @@
 #include <memory>
 #include <chrono>
 #include <map>
+#include <thread>
+#include <vector>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -14,87 +19,147 @@
 
 class DatabaseManager {
 private:
-    std::string tcp_host;
-    int tcp_port;
-    std::unique_ptr<WebSocketServer> ws_server;
-    std::vector<std::string> batch_updates;
-    const size_t BATCH_SIZE = 20;
-    std::thread ws_thread;
-
+    std::string tcp_host_;
+    int tcp_port_;
+    int sock_;
+    struct sockaddr_in serv_addr_;
+    std::unique_ptr<WebSocketServer> ws_server_;
+    std::thread db_thread_;
+    std::thread ws_thread_;
+    std::queue<std::string> db_queue_;
+    std::queue<std::string> ws_queue_;
+    std::mutex db_mutex_;
+    std::mutex ws_mutex_;
+    std::condition_variable db_cv_;
+    std::condition_variable ws_cv_;
+    bool stop_threads_ = false;
 
 public:
-    DatabaseManager(const std::string &host, int port) : tcp_host(host), tcp_port(port) {
-        ws_server = std::make_unique<WebSocketServer>();
-        ws_thread = std::thread([this]() {
-            this->ws_server->run(9002);
+    DatabaseManager(const std::string &host, int port) : tcp_host_(host), tcp_port_(port), sock_(-1) {
+        ws_server_ = std::make_unique<WebSocketServer>();
+
+        memset(&serv_addr_, 0, sizeof(serv_addr_));
+        serv_addr_.sin_family = AF_INET;
+        serv_addr_.sin_port = htons(tcp_port_);
+        if (inet_pton(AF_INET, tcp_host_.c_str(), &serv_addr_.sin_addr) <= 0) {
+            std::cerr << "invalid address: " << tcp_host_ << std::endl;
+        }
+
+        db_thread_ = std::thread(&DatabaseManager::processDatabaseQueue, this);
+
+        ws_thread_ = std::thread(&DatabaseManager::processWebSocketQueue, this);
+
+        std::thread ws_server_thread([this]() {
+            ws_server_->run(9002);
         });
+        ws_server_thread.detach();
     }
 
+    ~DatabaseManager() {
+        stop_threads_ = true;
+        db_cv_.notify_all();
+        ws_cv_.notify_all();
 
-    ~ DatabaseManager() {
-        if (ws_server) {
-            ws_server->stop();
+        if (db_thread_.joinable()) {
+            db_thread_.join();
         }
-        if (ws_thread.joinable()) {
-            ws_thread.join();
+        if (ws_thread_.joinable()) {
+            ws_thread_.join();
         }
+        if (sock_ != -1) {
+            close(sock_);
+        }
+        ws_server_->stop();
     }
 
-    void send_batch_to_database() {
-        if (batch_updates.empty()) return;
+    bool connect_to_server() {
+        if (sock_ == -1) {
+            sock_ = socket(AF_INET, SOCK_STREAM, 0);
+            if (sock_ < 0) {
+                std::cerr << "socket creation error: " << strerror(errno) << std::endl;
+                return false;
+            }
 
-        std::stringstream combined_update;
-        for (const auto& update : batch_updates) {
-            combined_update << update;
+            int opt = 1;
+            if (setsockopt(sock_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+                std::cerr << "error setting socket options: " << strerror(errno) << std::endl;
+                close(sock_);
+                sock_ = -1;
+                return false;
+            }
+
+            if (connect(sock_, (struct sockaddr *) &serv_addr_, sizeof(serv_addr_)) < 0) {
+                std::cerr << "connection failed to host: " << tcp_host_ << " on port: " << tcp_port_ << " error: "
+                          << strerror(errno) << std::endl;
+                close(sock_);
+                sock_ = -1;
+                return false;
+            }
+
+            std::cout << "connected to server: " << tcp_host_ << " on port: " << tcp_port_ << std::endl;
         }
-        send_line_protocol_tcp(combined_update.str());
-        batch_updates.clear();
+
+        return true;
     }
 
     void send_line_protocol_tcp(const std::string &line_protocol) {
-        std::cout << "attempting to send line protocol: [" << line_protocol << "]" << std::endl;
-
-        int sock = 0;
-        struct sockaddr_in serv_addr;
-
-        if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            std::cerr << "socket creation error: " << strerror(errno) << std::endl;
-            return;
+        {
+            std::lock_guard<std::mutex> lock(db_mutex_);
+            db_queue_.push(line_protocol);
         }
+        db_cv_.notify_one();
+    }
 
-        int opt = 1;
-        if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-            std::cerr << "error setting socket options: " << strerror(errno) << std::endl;
-            close(sock);
-            return;
+    void broadcast_to_websocket(const std::string &message) {
+        {
+            std::lock_guard<std::mutex> lock(ws_mutex_);
+            ws_queue_.push(message);
         }
+        ws_cv_.notify_one();
+    }
 
-        serv_addr.sin_family = AF_INET;
-        serv_addr.sin_port = htons(tcp_port);
+    void processDatabaseQueue() {
+        while (!stop_threads_) {
+            std::unique_lock<std::mutex> lock(db_mutex_);
+            db_cv_.wait(lock, [this] { return !db_queue_.empty() || stop_threads_; });
 
-        const char *host_cstr = tcp_host.c_str();
-        if (inet_pton(AF_INET, host_cstr, &serv_addr.sin_addr) <= 0) {
-            std::cerr << "invalid address: " << tcp_host << " Error: "
-                      << strerror(errno) << std::endl;
-            close(sock);
-            return;
+            while (!db_queue_.empty()) {
+                std::string line_protocol = db_queue_.front();
+                db_queue_.pop();
+                lock.unlock();
+
+                if (connect_to_server()) {
+                    ssize_t sent_bytes = send(sock_, line_protocol.c_str(), line_protocol.length(), 0);
+                    if (sent_bytes < 0) {
+                        std::cerr << "error sending data: " << strerror(errno) << std::endl;
+                        close(sock_);
+                        sock_ = -1;
+                    } else {
+                        std::cout << "successfully sent data to database: " << line_protocol << std::endl;
+                    }
+                }
+
+                lock.lock();
+            }
         }
+    }
 
-        if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-            std::cerr << "connection failed to host: " << tcp_host << " on port: " << tcp_port << " Error: "
-                      << strerror(errno) << std::endl;
-            close(sock);
-            return;
+    void processWebSocketQueue() {
+        while (!stop_threads_) {
+            std::unique_lock<std::mutex> lock(ws_mutex_);
+            ws_cv_.wait(lock, [this] { return !ws_queue_.empty() || stop_threads_; });
+
+            while (!ws_queue_.empty()) {
+                std::string message = ws_queue_.front();
+                ws_queue_.pop();
+                lock.unlock();
+
+                ws_server_->broadcast(message);
+                std::cout << "broadcast message to websocket clients: " << message << std::endl;
+
+                lock.lock();
+            }
         }
-
-        ssize_t sent_bytes = send(sock, line_protocol.c_str(), line_protocol.length(), 0);
-        if (sent_bytes < 0) {
-            std::cerr << "error sending data: " << strerror(errno) << std::endl;
-        } else {
-            std::cout << "successfully sent data: " << line_protocol << std::endl;
-        }
-
-        close(sock);
     }
 
     void add_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
@@ -105,7 +170,6 @@ public:
                       << ",id=" << id << "i"
                       << ",status=\"active\""
                       << " " << unix_time << "\n";
-
         send_line_protocol_tcp(line_protocol.str());
 
     }
@@ -118,9 +182,7 @@ public:
         line_protocol << "orders id=" << id << "i"
                       << ",status=\"cancelled\""
                       << " " << current_time << "\n";
-
         send_line_protocol_tcp(line_protocol.str());
-
     }
 
     void modify_order(uint64_t id, float new_price, uint32_t new_size, uint64_t unix_time) {
@@ -130,9 +192,18 @@ public:
                       << ",id=" << id << "i"
                       << ",status=\"active\""
                       << " " << unix_time << "\n";
-
         send_line_protocol_tcp(line_protocol.str());
+    }
 
+    void send_market_order_to_gui(float price, uint32_t size, bool side, uint64_t unix_time) {
+        nlohmann::json market_order = {
+                {"time",  unix_time},
+                {"price", price},
+                {"size",  size},
+                {"side",  side ? "buy" : "sell"}
+        };
+
+        broadcast_to_websocket(market_order.dump());
     }
 
     template<typename BidCompare, typename AskCompare>
@@ -150,11 +221,11 @@ public:
 
         auto process_side = [&](const auto &side, const std::string &side_str, bool is_bid) {
             int count = 0;
-            for (const auto &[price, limit_ptr] : side) {
+            for (const auto &[price, limit_ptr]: side) {
                 if (++count > 20) break;
 
                 nlohmann::json level = {
-                        {"price", price},
+                        {"price",  price},
                         {"volume", limit_ptr->volume_}
                 };
 
@@ -181,17 +252,10 @@ public:
                       return a["price"].get<float>() > b["price"].get<float>();
                   });
 
-        ws_server->broadcast(orderbook_update.dump());
+        broadcast_to_websocket(orderbook_update.dump());
 
-        for (const auto &update : db_updates) {
-            batch_updates.push_back(update);
-            if (batch_updates.size() >= BATCH_SIZE) {
-                send_batch_to_database();
-            }
-        }
-        if (!batch_updates.empty()) {
-            send_batch_to_database();
+        for (const auto &update: db_updates) {
+            send_line_protocol_tcp(update);
         }
     }
-
 };

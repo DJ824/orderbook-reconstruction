@@ -129,7 +129,6 @@ function initChart() {
     svg.append("g")
         .attr("class", "y-axis");
 
-    // Add gradients
     const defs = svg.append("defs");
 
     const bidGradient = defs.append("linearGradient")
@@ -179,15 +178,12 @@ function updateChart() {
     askArea.datum(chartData.askData).attr("d", chart.areaGenerator);
 }
 
-// Initialize the chart
 initChart();
 
-// Error handling for worker
 worker.onerror = (error) => {
     console.error('Web Worker Error:', error);
 };
 
-// Add some basic error handling
 window.addEventListener('error', (event) => {
     console.error('Global error:', event.error);
 });

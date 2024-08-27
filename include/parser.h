@@ -13,11 +13,11 @@
 #include <iostream>
 #include "message.h"
 
-class parser {
+class Parser {
 public:
-    explicit parser(const std::string &file_path);
+    explicit Parser(const std::string &file_path);
     void parse();
-    std::vector<message> message_stream;
+    std::vector<message> message_stream_;
 
 private:
     std::string file_path_;

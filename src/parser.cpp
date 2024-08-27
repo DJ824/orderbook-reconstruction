@@ -4,11 +4,11 @@
 
 #include "parser.h"
 
-parser::parser(const std::string &file_path) : file_path_(file_path) {
-    message_stream.reserve(9000000);
+Parser::Parser(const std::string &file_path) : file_path_(file_path) {
+    message_stream_.reserve(9000000);
 }
 
-void parser::parse() {
+void Parser::parse() {
     std::ifstream file(file_path_);
     if (!file.is_open()) {
         std::cerr << "Error opening file: " << file_path_ << std::endl;
@@ -28,7 +28,7 @@ void parser::parse() {
     file.close();
 }
 
-void parser::parse_line(const std::string &line) {
+void Parser::parse_line(const std::string &line) {
     std::istringstream ss(line);
     std::string token;
 
@@ -58,6 +58,6 @@ void parser::parse_line(const std::string &line) {
 
     bool bid_or_ask = (side == "B");
     message msg(order_id, ts_event, size, price, action[0], bid_or_ask);
-    message_stream.push_back(msg);
+    message_stream_.push_back(msg);
 }
 

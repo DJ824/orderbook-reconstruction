@@ -15,7 +15,7 @@ int main() {
     //db_manager.create_tables();
     //db_manager.add_status_column();
 
-    parser p("modified_esm4_mbo.csv");
+    Parser p("modified_esm4_mbo.csv");
     p.parse();
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -26,11 +26,13 @@ int main() {
     int trade_messages = 0;
     int count = 0;
 
-    for (const auto &msg: p.message_stream) {
+    for (const auto &msg: p.message_stream_) {
         ++count;
+        /*
         if (count == 300000) {
             break;
         }
+         */
 
         switch (msg.action_) {
             case 'A':

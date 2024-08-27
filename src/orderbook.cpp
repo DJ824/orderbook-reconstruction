@@ -74,7 +74,6 @@ void orderbook::remove_order(uint64_t id, float price, uint32_t size, bool side)
     order_pool_.return_order(target);
     db_manager_.remove_order(id);
 
-
     //std::cout << "cancelled limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
 
@@ -124,12 +123,11 @@ void orderbook::modify_order(uint64_t id, float new_price, uint32_t new_size, bo
     std::cout << "old size: " << prev_size << " new size: " << target->size << std::endl;
      */
     db_manager_.modify_order(id, new_price, new_size, unix_time);
-
-
 }
 
 
 void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) {
+    int og_size = size;
     if (side) {
         if (offers_.empty()) {
             return;
@@ -214,6 +212,10 @@ void orderbook::trade_order(uint64_t id, float price, uint32_t size, bool side) 
             }
         }
     }
+    uint64_t unix_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+    db_manager_.send_market_order_to_gui(price, og_size, side, unix_time);
 }
 
 limit *orderbook::get_or_insert_limit(bool side, float price) {
