@@ -1,6 +1,6 @@
 # High-Performance Orderbook 
 
-This project implements a high-performance orderbook suitable for algorithmic trading applications. The orderbook efficiently manages buy (bid) and sell (offer) orders, supporting operations like adding, modifying, and removing orders, as well as executing trades. This orderbook was built to process MBO data from databento, specifically for sp500 futures.
+This project implements a high-performance orderbook and backtesting framework suitable for algorithmic trading applications. The orderbook efficiently manages buy (bid) and sell (offer) orders, supporting operations like adding, modifying, and removing orders, as well as executing trades. This orderbook was built to process MBO data from databento, specifically for sp500 futures.
 
 ## Implementation Details 
 
@@ -8,8 +8,12 @@ One thing I did differently was to include the action of market orders hitting t
 
 <img width="769" alt="image" src="https://github.com/user-attachments/assets/8c2e4505-78e2-4374-b3e9-344ca1f85fb6">
 
-Over here we see a market trade message come in at timestamp ending at 11, side is Ask, at price 5300.25 for 2 lots. The next few messages sharing the same timestamp take into account what happens on the book when the market order takes place. We see that one order gets filled ending in order id 16, and the next gets filled at order id 17. We then see cancellation messages for those same id's at the same time, which shows the effect of the market order clearing the size of the limit order and removing from the book. Common implementations just read in the effect of the market order, but I thought it would be a fun challenge to implement market orders themselves. My implementation ignores the fill message, by reading in the trade message, making the action of the market order hit the book, then reading the cancellation message, removing the filled limit order. Next step would be to ignore all cancellation messages that occur after market orders, in order to have the true effect. Could do this by having simply checking size and removing orders. 
+Over here we see a market trade message come in at timestamp ending at 11, side is Ask, at price 5300.25 for 2 lots. The next few messages sharing the same timestamp take into account what happens on the book when the market order takes place. We see that one order gets filled ending in order id 16, and the next gets filled at order id 17. We then see cancellation messages for those same id's at the same time, which shows the effect of the market order clearing the size of the limit order and removing from the book. Common implementations just read in the effect of the market order, but I thought it would be a fun challenge to implement market orders themselves. My implementation ignores the fill message, by reading in the trade message, making the action of the market order hit the book, then reading the cancellation message, removing the filled limit order. We accomplish 
+this by accessing the limit object that the price of the trade order represents, then iterating through the list of orders until all size of the market order has been depleted.
 
+Update: 
+Added database integration (QuestDB using Influx Line Protocol) for book snapshots/message, gui to visualize the book using d3.js and web workers to improve performance, and a backtesting framework incorporating a 2 hft strategies based on book imbalance/skew and vwap.
+In addition, we use an asynchronous logger which uses 2 lock free queues to relay the results of the backtester, writing to std out and a csv file with a seperate thread for each. 
 
 ## Key Components
 
@@ -51,20 +55,24 @@ Over here we see a market trade message come in at timestamp ending at 11, side 
 <img width="529" alt="image" src="https://github.com/user-attachments/assets/7d1d7624-f440-4297-bd78-bc0218d460f9">
 
 - Clion has a pretty cool profiling tool, which I used to optimize the performance.
-- <img width="923" alt="image" src="https://github.com/user-attachments/assets/f483cfaf-81fe-4103-856b-de2130ac2f45">
+ <img width="923" alt="image" src="https://github.com/user-attachments/assets/f483cfaf-81fe-4103-856b-de2130ac2f45">
 - We see here that dynamically allocating new orders in the add limit order function takes up a considerable amount of time, with this implementation the performance was around 5 seconds. I implemented an order pool, preallocating 1000000 orders in a vector, and by integrating it, was able to shave almost 50%.
-
-
+- If we incorporate the backtester, we parse the first hour of market open in ~17.6 seconds. 
+<img width="662" alt="image" src="https://github.com/user-attachments/assets/c35d87fa-2bf3-4ae0-b1fb-fa6eae46a9bc">
+- One reason for the large performanc impact is the `calculate_vols()` function, which calcualtes
+the total bid and ask volume for the first 100 levels on each side. The way I did it was simply iterating over the maps, but one could also use another 2 maps that hold only the first 100 levels, and update the respective limits after each message, which would be at worst o(log(100)), vs o(100).
+- ![image](https://github.com/user-attachments/assets/f43a6443-9aac-42bf-a44e-d5a765bb988d)
 
 
 ## Future Plans 
-- Gui to visualize the book 
-- Backtesting framework to test hft strats
-- Add support for multiple instruments like nq, zn, can have seperate message streams for each and a central orderbook class, have one thread on each book maybe
-- Matching engine, curently these messages are transmitted by the CME after the customer messages have been processed by their engine. The customer messages also inlcude stop orders, specifically market stop and limit stop. Limit stops only populate the book once the best bid/ask have reached the price of the stop. Then they are added to the doubly linked list of order objects at that price. We would need another 2 unordered_map<float, order*> that include the stop orders, then every iteration of the book we check the best bid/ask and push the orders onto the appropriate price. Handling order matching should be relatively simple, as one cannot submit a limit order above the best bid/ask, it would simply turn into a market order. One could also just have a match function which checks if the best bid crosses the best ask, and if so, iterate through the orders matching them. 
-
+- Gui to visualize the book - done
+- Backtesting framework to test hft strats - done
+- Add support for multiple instruments like nq, zn, can have seperate message streams for each and a central orderbook class, have one thread on each book maybe - todo 
+- Visualize the results of the strategies - todo
+- Optimization via low latency techniques - todo 
 
 ## Visualization 
 <img width="899" alt="image" src="https://github.com/user-attachments/assets/b95389a0-15f7-4773-8cff-2eeba34af2de">
+
 https://www.youtube.com/watch?v=0h6425tUcWI
 
