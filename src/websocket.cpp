@@ -4,6 +4,7 @@
 #include <set>
 #include <functional>
 #include <mutex>
+#pragma once
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 using websocketpp::connection_hdl;
@@ -34,7 +35,7 @@ public:
 
     void broadcast(const std::string& message) {
         std::lock_guard<std::mutex> lock(connection_mutex_);
-        for (auto it : connections_) {
+        for (const auto& it : connections_) {
             ws_server_.send(it, message, websocketpp::frame::opcode::text);
         }
     }
@@ -49,19 +50,19 @@ public:
     }
 
 private:
-    void on_open(connection_hdl hdl) {
+    void on_open(const connection_hdl& hdl) {
         std::lock_guard<std::mutex> lock(connection_mutex_);
         connections_.insert(hdl);
         std::cout << "new websocket connection established" << std::endl;
     }
 
-    void on_close(connection_hdl hdl) {
+    void on_close(const connection_hdl& hdl) {
         std::lock_guard<std::mutex> lock(connection_mutex_);
         connections_.erase(hdl);
         std::cout << "websocket closed" << std::endl;
     }
 
-    void on_message(connection_hdl hdl, server::message_ptr msg) {
+    void on_message(const connection_hdl& hdl, const server::message_ptr& msg) {
       //  std::cout << "received message: " << msg->get_payload() << std::endl;
     }
 };

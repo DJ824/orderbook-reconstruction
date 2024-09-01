@@ -30,10 +30,19 @@ worker.onmessage = (event) => {
         renderOrderBook();
         updateChartData();
         updateChart();
-    } else if (data.time !== undefined && data.price !== undefined && data.size !== undefined && data.side !== undefined) {
-        addMarketOrder(data);
+    } else if (data.type === 'timestamp') {
+        updateTimestamp(data.value);
     }
 };
+
+function updateTimestamp(timestamp) {
+    const timestampElement = document.getElementById('timestamp');
+    if (timestampElement) {
+        timestampElement.textContent = `Current Time: ${timestamp}`;
+    } else {
+        console.error('Timestamp element not found');
+    }
+}
 
 function renderOrderBook() {
     const template = html`
@@ -129,6 +138,7 @@ function initChart() {
     svg.append("g")
         .attr("class", "y-axis");
 
+    // Add gradients
     const defs = svg.append("defs");
 
     const bidGradient = defs.append("linearGradient")

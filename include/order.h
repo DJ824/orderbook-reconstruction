@@ -11,20 +11,20 @@
 
 using std::string;
 
-class limit;
+class Limit;
 
-class order {
+class Order {
 public:
-    order(uint64_t order_id, float price, uint32_t order_size, bool order_side, uint64_t order_unix_time);
-    order();
+    Order(uint64_t order_id, float price, uint32_t order_size, bool order_side, uint64_t order_unix_time);
+    Order();
     uint64_t id_;
     float price_;
     uint32_t size;
     bool side_;
     uint64_t unix_time_;
-    order* next_;
-    order* prev_;
-    limit* parent_;
+    Order* next_;
+    Order* prev_;
+    Limit* parent_;
     bool filled_;
 };
 

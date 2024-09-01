@@ -8,55 +8,72 @@ body {
     justify-content: center;
     height: 100vh;
 }
+
 .container {
     display: flex;
     width: 100%;
     max-width: 1800px;
     height: calc(100vh - 40px);
 }
+
 .chart-container {
-    width: 50%;
+    flex-grow: 1;
     height: 100%;
     background-color: #111;
     border: 1px solid #333;
-    margin-right: 20px;
+    display: flex;
+    flex-direction: column;
+    margin-right: 10px;
 }
-.orderbook-container, .market-orders-container {
-    width: 25%;
+
+#chart {
+    flex-grow: 1;
+}
+
+.timestamp {
+    text-align: center;
+    font-size: 14px;
+    padding: 10px;
+    background-color: #222;
+    border-top: 1px solid #333;
+}
+
+.orderbook-container {
+    width: 200px;
     background-color: #111;
     border: 1px solid #333;
     display: flex;
     flex-direction: column;
 }
-.market-orders-container {
-    margin-left: 20px;
-}
-.orderbook-header, .market-orders-header {
+
+.orderbook-header {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     padding: 10px;
     background-color: #222;
     font-weight: bold;
     text-align: center;
-    font-size: 16px;
+    font-size: 14px;
 }
-.orderbook-body, .market-orders-body {
+
+.orderbook-body {
     flex-grow: 1;
     overflow-y: auto;
 }
-.orderbook-row, .market-order-row {
+
+.orderbook-row {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     padding: 5px 10px;
-    font-size: 14px;
+    font-size: 12px;
 }
+
 .ask-row { background-color: rgba(255, 0, 0, 0.1); }
 .bid-row { background-color: rgba(0, 0, 255, 0.1); }
-.ask-volume, .sell-order { color: #ff4136; text-align: right; }
-.bid-volume, .buy-order { color: #0074D9; text-align: left; }
+.ask-volume { color: #ff4136; text-align: right; }
+.bid-volume { color: #0074D9; text-align: left; }
 .price { color: #ffffff; text-align: center; }
-.time { text-align: left; }
-.size { text-align: right; }
+
 .spread-row {
     background-color: #333;
     border-top: 1px solid #444;

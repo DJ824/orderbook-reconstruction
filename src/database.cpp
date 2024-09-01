@@ -5,10 +5,10 @@
 #include <chrono>
 #include <map>
 #include <thread>
+#include <fstream>
+#include <utility>
 #include <vector>
 #include <queue>
-#include <mutex>
-#include <condition_variable>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -16,6 +16,7 @@
 #include <nlohmann/json.hpp>
 #include "limit.h"
 #include "websocket.cpp"
+#pragma once
 
 class DatabaseManager {
 private:
@@ -34,8 +35,18 @@ private:
     std::condition_variable ws_cv_;
     bool stop_threads_ = false;
 
+    void send_batch_to_database(const std::vector<std::string>& line_protocols) {
+        std::string batch = std::accumulate(line_protocols.begin(), line_protocols.end(), std::string(),
+                                            [](const std::string& a, const std::string& b) {
+                                                return a + (a.empty() ? "" : "\n") + b;
+                                            });
+        //std::cout << batch << std::endl;
+
+        send_line_protocol_tcp(batch);
+    }
+
 public:
-    DatabaseManager(const std::string &host, int port) : tcp_host_(host), tcp_port_(port), sock_(-1) {
+    DatabaseManager(std::string host, int port) : tcp_host_(std::move(host)), tcp_port_(port), sock_(-1) {
         ws_server_ = std::make_unique<WebSocketServer>();
 
         memset(&serv_addr_, 0, sizeof(serv_addr_));
@@ -45,9 +56,9 @@ public:
             std::cerr << "invalid address: " << tcp_host_ << std::endl;
         }
 
-        db_thread_ = std::thread(&DatabaseManager::processDatabaseQueue, this);
+        db_thread_ = std::thread(&DatabaseManager::process_database_queue, this);
 
-        ws_thread_ = std::thread(&DatabaseManager::processWebSocketQueue, this);
+        ws_thread_ = std::thread(&DatabaseManager::process_websocket_queue, this);
 
         std::thread ws_server_thread([this]() {
             ws_server_->run(9002);
@@ -118,7 +129,7 @@ public:
         ws_cv_.notify_one();
     }
 
-    void processDatabaseQueue() {
+    void process_database_queue() {
         while (!stop_threads_) {
             std::unique_lock<std::mutex> lock(db_mutex_);
             db_cv_.wait(lock, [this] { return !db_queue_.empty() || stop_threads_; });
@@ -135,16 +146,15 @@ public:
                         close(sock_);
                         sock_ = -1;
                     } else {
-                        std::cout << "successfully sent data to database: " << line_protocol << std::endl;
+                     //   std::cout << "successfully sent data to database: " << line_protocol << std::endl;
                     }
                 }
-
                 lock.lock();
             }
         }
     }
 
-    void processWebSocketQueue() {
+    void process_websocket_queue() {
         while (!stop_threads_) {
             std::unique_lock<std::mutex> lock(ws_mutex_);
             ws_cv_.wait(lock, [this] { return !ws_queue_.empty() || stop_threads_; });
@@ -155,11 +165,40 @@ public:
                 lock.unlock();
 
                 ws_server_->broadcast(message);
-                std::cout << "broadcast message to websocket clients: " << message << std::endl;
+                //std::cout << "broadcast message to websocket clients: " << message << std::endl;
 
                 lock.lock();
             }
         }
+    }
+
+    void send_csv_to_database(const std::string& csv_file_path, const std::string& measurement_name) {
+        std::ifstream file(csv_file_path);
+        if (!file.is_open()) {
+            std::cerr << "Error opening file: " << csv_file_path << std::endl;
+            return;
+        }
+
+        std::string line;
+        std::vector<std::string> line_protocols(1001);
+
+        std::getline(file, line);
+
+        while (std::getline(file, line)) {
+            std::stringstream line_protocol;
+            line_protocol << measurement_name << " " << line;
+            line_protocols.push_back(line_protocol.str());
+
+            if (line_protocols.size() >= 1000) {
+                send_batch_to_database(line_protocols);
+                line_protocols.clear();
+            }
+        }
+
+        if (!line_protocols.empty()) {
+            send_batch_to_database(line_protocols);
+        }
+        file.close();
     }
 
     void add_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
@@ -171,7 +210,6 @@ public:
                       << ",status=\"active\""
                       << " " << unix_time << "\n";
         send_line_protocol_tcp(line_protocol.str());
-
     }
 
     void remove_order(uint64_t id) {
@@ -206,9 +244,17 @@ public:
         broadcast_to_websocket(market_order.dump());
     }
 
+    void send_timestamp_to_gui(const std::string& timestamp) {
+        nlohmann::json timestamp_json = {
+                {"type", "timestamp"},
+                {"value", timestamp}
+        };
+        broadcast_to_websocket(timestamp_json.dump());
+    }
+
     template<typename BidCompare, typename AskCompare>
-    void update_limit_orderbook(const std::map<float, limit *, BidCompare> &bids,
-                                const std::map<float, limit *, AskCompare> &offers) {
+    void update_limit_orderbook(const std::map<float, Limit *, BidCompare> &bids,
+                                const std::map<float, Limit *, AskCompare> &offers) {
         uint64_t current_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
 

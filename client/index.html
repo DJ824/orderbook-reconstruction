@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Book GUI</title>
+    <title>Order Book Visualization</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
 <div class="container">
-    <div id="chart" class="chart-container"></div>
+    <div class="chart-container">
+        <div id="chart"></div>
+        <div id="timestamp" class="timestamp"></div>
+    </div>
     <div class="orderbook-container">
         <div class="orderbook-header">
             <span>Bids</span>
@@ -17,14 +19,6 @@
             <span>Asks</span>
         </div>
         <div id="orderbook-body" class="orderbook-body"></div>
-    </div>
-    <div class="market-orders-container">
-        <div class="market-orders-header">
-            <span>Time</span>
-            <span>Price</span>
-            <span>Size</span>
-        </div>
-        <div id="market-orders-body" class="market-orders-body"></div>
     </div>
 </div>
 <script type="module" src="main.js"></script>

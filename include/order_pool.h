@@ -8,16 +8,16 @@
 #include "order.h"
 
 
-class order_pool {
+class OrderPool {
 private:
-    std::vector<std::unique_ptr<order>> pool;
-    std::vector<order*> available_orders;
+    std::vector<std::unique_ptr<Order>> pool;
+    std::vector<Order*> available_orders;
 
 public:
-    order_pool(size_t);
-    //~order_pool();
-    order* get_order();
-    void return_order(order* order);
+    explicit OrderPool(size_t);
+    //~OrderPool();
+    Order* get_order();
+    void return_order(Order* order);
 };
 
 
