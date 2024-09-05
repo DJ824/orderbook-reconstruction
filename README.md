@@ -45,7 +45,7 @@ In addition, we use an asynchronous logger which uses 2 lock free queues to rela
 
 ### Get or Insert Limit 
 - Function: `get_or_insert_limit(bool side, int32_t price);`
-- Time Complexity: O(1) average, worst case O(log(n)) when creating new limit objects to insert into maps 
+- Time Complexity: O(1) average, worst case O(logn) when creating new limit objects to insert into maps 
 - Description: Gets a limit object for the requested price and side. We have an unordered_map that we use to store all current limit objects for fast access, if we have to create a new limit object, we store in the appropraite side. 
 
 ## Data Structures Used
