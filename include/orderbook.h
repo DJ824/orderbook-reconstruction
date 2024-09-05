@@ -21,13 +21,15 @@
 
 class Orderbook {
 private:
-    std::unordered_map<std::pair<float, bool>, Limit*, boost::hash<std::pair<float, bool>>> limit_lookup_;
+    std::unordered_map<std::pair<int32_t , bool>, Limit*, boost::hash<std::pair<int32_t, bool>>> limit_lookup_;
     OrderPool order_pool_;
     uint64_t bid_count_;
     uint64_t ask_count_;
 
     //limit_pool limit_pool_;
     DatabaseManager &db_manager_;
+    bool update_possible = false;
+
 
 public:
     explicit Orderbook(DatabaseManager& db_manager);
@@ -46,29 +48,50 @@ public:
     void calculate_skew();
 
     // imbalance calculations
-    uint64_t bid_vol_;
-    uint64_t ask_vol_;
-    float imbalance_;
-    void calculate_imbalance();
-    void calculate_vols();
+    int32_t bid_vol_;
+    int32_t ask_vol_;
+    int32_t bid_vol_check_;
+    int32_t ask_vol_check_;
+    void intial_calculation() {
+        bid_vol_check_ = 0;
+        ask_vol_check_ = 0;
+        auto bid_it = bids_.begin();
+        auto offer_it = offers_.begin();
+        int count = 0;
+        while (count < 100) {
+            bid_vol_check_ += bid_it->second->volume_;
+            ++bid_it;
+            ++count;
+        }
 
+        count = 0;
+        while (count < 100) {
+            ask_vol_check_ += offer_it->second->volume_;
+            ++offer_it;
+            ++count;
+        }
+    }
+
+    double imbalance_;
+    void calculate_imbalance();
 
     uint64_t get_bid_depth() const;
     uint64_t get_ask_depth() const;
 
 
-    void add_limit_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time);
-    void modify_order(uint64_t id, float new_price, uint32_t new_size, bool side, uint64_t unix_time);
-    void trade_order(uint64_t id, float price, uint32_t size, bool side);
-    void remove_order(uint64_t id, float price, uint32_t size, bool side);
+    void add_limit_order(uint64_t id, int32_t price, uint32_t size, bool side, uint64_t unix_time);
+    void modify_order(uint64_t id, int32_t new_price, uint32_t new_size, bool side, uint64_t unix_time);
+    void trade_order(uint64_t id, int32_t price, uint32_t size, bool side);
+    void remove_order(uint64_t id, int32_t price, uint32_t size, bool side);
     Limit* get_best_bid();
     Limit* get_best_ask();
-    float get_best_bid_price() const;
-    float get_best_ask_price() const;
+    int32_t get_best_bid_price() const;
+    int32_t get_best_ask_price() const;
     uint64_t get_count() const;
     bool contains_order(uint64_t id);
     Order* get_order(uint64_t id);
-    Limit* get_or_insert_limit(bool side, float price);
+    Limit* get_or_insert_limit(bool side, int32_t price);
+
 
     inline void process_msg(const message &msg) {
         auto nanoseconds = std::chrono::nanoseconds(msg.time_);
@@ -76,6 +99,7 @@ public:
         current_message_time_ = std::chrono::system_clock::time_point(microseconds);
         switch (msg.action_) {
             case 'A':
+                //std::cout << msg.price_ << std::endl;
                 add_limit_order(msg.id_, msg.price_, msg.size_, msg.side_, msg.time_);
                 break;
             case 'C':
@@ -90,9 +114,59 @@ public:
         }
     }
 
-    std::atomic<uint64_t> message_count_{0};
-    std::map<float, Limit *, std::less<>> offers_;
-    std::map<float, Limit *, std::greater<>> bids_;
+    inline void calculate_vols() {
+        bid_vol_ = 0;
+        ask_vol_ = 0;
+
+        auto bid_it = bids_.begin();
+        auto bid_end = bids_.end();
+        for (int i = 0; i < 100 && bid_it != bid_end; ++i, ++bid_it) {
+            bid_vol_ += bid_it->second->volume_;
+        }
+
+        auto ask_it = offers_.begin();
+        auto ask_end = offers_.end();
+        for (int i = 0; i < 100 && ask_it != ask_end; ++i, ++ask_it) {
+            ask_vol_ += ask_it->second->volume_;
+        }
+        update_possible = true;
+
+    }
+
+    inline void update_vol(int32_t price, int32_t size, bool side, bool is_add, bool update) {
+        if (!update) {
+            return;
+        }
+
+        int32_t& vol = side ? bid_vol_ : ask_vol_;
+        int32_t best_price = side ? get_best_bid_price() : get_best_ask_price();
+
+        if (std::abs(price - best_price) <= 2500) {
+            vol += is_add ? size : -size;
+        }
+    }
+
+
+    inline void update_modify_vol(int32_t og_price, int32_t new_price, int32_t og_size, int32_t new_size, bool side, bool update) {
+        if (!update) {
+            return;
+        }
+
+        int32_t best_price = side ? get_best_bid_price() : get_best_ask_price();
+        int32_t& vol = side ? bid_vol_ : ask_vol_;
+
+        // these values will either be 0 (false) or 1 (true)
+        int32_t og_in_range = (std::abs(og_price - best_price) <= 2500);
+        int32_t new_in_range = (std::abs(new_price - best_price) <= 2500);
+
+        vol -= og_size * og_in_range;
+        vol += new_size * new_in_range;
+    }
+
+
+    std::map<int32_t, Limit *, std::less<>> offers_;
+    std::map<int32_t, Limit *, std::greater<>> bids_;
+    std::string get_formatted_time_fast() const;
     std::string get_formatted_time() const;
 
 };
