@@ -50,10 +50,10 @@ In addition, we use an asynchronous logger which uses 2 lock free queues to rela
 
 ## Data Structures Used
 
-- `std::map<float, limit*, std::greater<>>`: For storing bid price levels
-- `std::map<float, limit*, std::less<>>`: For storing offer price levels
+- `std::map<int32_t, limit*, std::greater<>>`: For storing bid price levels
+- `std::map<int32_t, limit*, std::less<>>`: For storing offer price levels
 - `std::unordered_map<uint64_t, order*>`: For quick order lookup by ID
-- `std::unordered_map<std::pair<int32_t, bool>, limit*, boost::hash<std::pair<int32_t, bool>>>`: For O(1) access to limit objects
+- `std::unordered_map<std::pair<int32_t, bool>, limit*, boost::hash<std::pair<int32_t, bool>>>`: For quick access to limit objects
 
 ## Performance 
 - process 8.2 million messages in ~2.7 seconds on M1 Max 32gb
@@ -62,7 +62,9 @@ In addition, we use an asynchronous logger which uses 2 lock free queues to rela
 - Clion has a pretty cool profiling tool, which I used to optimize the performance.
  <img width="923" alt="image" src="https://github.com/user-attachments/assets/f483cfaf-81fe-4103-856b-de2130ac2f45">
 - We see here that dynamically allocating new orders in the add limit order function takes up a considerable amount of time, with this implementation the performance was around 5 seconds. I implemented an order pool, preallocating 1000000 orders in a vector, and by integrating it, was able to shave almost 50%.
-Update 09/5/24: Memory mapped the csv file and optimized the way we calculate the total bid and ask vol of the first 100 levels, total time to run the backtester including csv parsing is around ~8.2 seconds for a day's worth of market data (nyc open to close) 
+- 
+Update 09/5/24: Memory mapped the csv file and optimized the way we calculate the total bid and ask vol of the first 100 levels, total time to run the backtester including csv parsing is around ~8.2 seconds for a day's worth of market data (nyc open to close)
+
 https://gifyu.com/image/S1vuT
 
 
