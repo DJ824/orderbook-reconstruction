@@ -43,7 +43,7 @@ In addition, we use an asynchronous logger which uses 2 lock free queues to rela
 - Time Complexity: O(1) (accessing the limit object being executed on) + O(m) (number of orders to be filled)
 - Description: Executes a market order. Get the limit object that the market order executed on and iterate through the list of orders, filling them. 
 
-### Trade Order
+### Get or Insert Limit 
 - Function: `get_or_insert_limit(bool side, int32_t price);`
 - Time Complexity: O(1) average, worst case O(log(n)) when creating new limit objects to insert into maps 
 - Description: Gets a limit object for the requested price and side. We have an unordered_map that we use to store all current limit objects for fast access, if we have to create a new limit object, we store in the appropraite side. 
