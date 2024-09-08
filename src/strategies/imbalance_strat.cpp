@@ -55,7 +55,7 @@ private:
     }
 
     void log_stats(const Orderbook& book) {
-        std::string timestamp = book.get_formatted_time();
+        std::string timestamp = book.get_formatted_time_fast();
         auto bid = book.get_best_bid_price();
         auto ask = book.get_best_ask_price();
         int trade_count = buy_qty_ + sell_qty_;
@@ -68,7 +68,7 @@ public:
             : position_(0), buy_qty_(0), sell_qty_(0),
               real_total_buy_px_(0), real_total_sell_px_(0),
               theo_total_buy_px_(0), theo_total_sell_px_(0),
-              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(100),
+              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(10),
               POINT_VALUE_(5.0), FEES_PER_SIDE_(52),
               db_manager_(db_manager) {
         logger_ = std::make_unique<AsyncLogger>("imbalance_strat_log.csv", db_manager, true);

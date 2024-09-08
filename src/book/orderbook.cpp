@@ -270,18 +270,6 @@ std::string Orderbook::get_formatted_time_fast() const {
     return std::string(buffer);
 }
 
-std::string Orderbook::get_formatted_time() const {
-    auto time_t = std::chrono::system_clock::to_time_t(current_message_time_);
-    std::tm* tm = std::localtime(&time_t);
-    std::ostringstream oss;
-    oss << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
-
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            current_message_time_.time_since_epoch()) % 1000;
-    oss << '.' << std::setfill('0') << std::setw(3) << ms.count();
-
-    return oss.str();
-}
 
 
 void Orderbook::calculate_skew() {

@@ -13,7 +13,7 @@ int main() {
         Orderbook book(db_manager);
 
         auto parsing_start = std::chrono::high_resolution_clock::now();
-        auto parser = std::make_unique<Parser>("es0528.csv");
+        auto parser = std::make_unique<Parser>("es0524.csv");
         std::cout << "parsing messages... " << std::endl;
         parser->parse();
         auto parsing_end = std::chrono::high_resolution_clock::now();

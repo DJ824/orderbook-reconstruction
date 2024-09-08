@@ -120,13 +120,13 @@ public:
 
         auto bid_it = bids_.begin();
         auto bid_end = bids_.end();
-        for (int i = 0; i < 100 && bid_it != bid_end; ++i, ++bid_it) {
+        for (int i = 0; i < 80 && bid_it != bid_end; ++i, ++bid_it) {
             bid_vol_ += bid_it->second->volume_;
         }
 
         auto ask_it = offers_.begin();
         auto ask_end = offers_.end();
-        for (int i = 0; i < 100 && ask_it != ask_end; ++i, ++ask_it) {
+        for (int i = 0; i < 80 && ask_it != ask_end; ++i, ++ask_it) {
             ask_vol_ += ask_it->second->volume_;
         }
         update_possible = true;
@@ -141,7 +141,7 @@ public:
         int32_t& vol = side ? bid_vol_ : ask_vol_;
         int32_t best_price = side ? get_best_bid_price() : get_best_ask_price();
 
-        if (std::abs(price - best_price) <= 2500) {
+        if (std::abs(price - best_price) <= 2000) {
             vol += is_add ? size : -size;
         }
     }
@@ -155,9 +155,8 @@ public:
         int32_t best_price = side ? get_best_bid_price() : get_best_ask_price();
         int32_t& vol = side ? bid_vol_ : ask_vol_;
 
-        // these values will either be 0 (false) or 1 (true)
-        int32_t og_in_range = (std::abs(og_price - best_price) <= 2500);
-        int32_t new_in_range = (std::abs(new_price - best_price) <= 2500);
+        int32_t og_in_range = (std::abs(og_price - best_price) <= 2000);
+        int32_t new_in_range = (std::abs(new_price - best_price) <= 2000);
 
         vol -= og_size * og_in_range;
         vol += new_size * new_in_range;

@@ -22,12 +22,14 @@ public:
     }
 
     void run(const std::vector<message> &messages) {
-        const std::string start_time = "2024-05-28 09:30:00.000";
-        const std::string end_time = "2024-05-28 16:00:00.000";
+        const std::string start_time = "2024-05-24 09:30:00.000";
+        const std::string end_time = "2024-05-24 16:00:00.000";
+        std::string prev_time;
 
         for (const auto &msg : messages) {
             ++count_;
             book_.process_msg(msg);
+
             std::string curr_time = book_.get_formatted_time_fast();
             if (count_ < 14000 && !first_update) {
                 book_.calculate_vols();
@@ -46,13 +48,19 @@ public:
                 //book_.calculate_vols();
                 book_.calculate_imbalance();
                 //std::cout << book_.get_formatted_time() << std::endl;
-                for (auto& strategy : strategies_) {
-                    strategy->on_book_update(book_);
+                int diff = std::strcmp(curr_time.c_str() + 17, prev_time.c_str() + 17);
+                if (diff >= 2) {
+                    for (auto& strategy : strategies_) {
+                        strategy->on_book_update(book_);
+                    }
                 }
             }
+            prev_time = curr_time;
+
             if (curr_time >= end_time) {
                 break;
             }
+
         }
     }
 };

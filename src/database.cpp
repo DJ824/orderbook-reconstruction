@@ -55,13 +55,34 @@ public:
 
     ~DatabaseManager() {
         stop_threads_ = true;
+
         db_cv_.notify_all();
+        orderbook_cv_.notify_all();
 
         if (db_thread_.joinable()) {
             db_thread_.join();
         }
+        if (orderbook_thread_.joinable()) {
+            orderbook_thread_.join();
+        }
+
         if (sock_ != -1) {
             close(sock_);
+            sock_ = -1;
+        }
+
+        flush_remaining_data();
+    }
+
+    void flush_remaining_data() {
+        std::lock_guard<std::mutex> db_lock(db_mutex_);
+        while (!db_queue_.empty()) {
+            db_queue_.pop();
+        }
+
+        std::lock_guard<std::mutex> ob_lock(orderbook_mutex_);
+        while (!orderbook_queue_.empty()) {
+            orderbook_queue_.pop();
         }
     }
 
