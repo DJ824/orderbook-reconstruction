@@ -4,8 +4,6 @@
 #include <iostream>
 #include <iomanip>
 #include <numeric>
-
-
 #include "orderbook.h"
 
 Orderbook::Orderbook(DatabaseManager& db_manager) : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000), db_manager_(db_manager)  {
@@ -45,12 +43,10 @@ void Orderbook::add_limit_order(uint64_t id, int32_t price, uint32_t size, bool 
     } else {
         ++ask_count_;
     }
+   // std::cout << id << std::endl;
 
     update_vol(price, size, side, true, update_possible);
-
-
     //db_manager_.add_order(id, price, size, side, unix_time);
-
     // std::cout << "added Limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
 
@@ -81,7 +77,7 @@ void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size, bool sid
 
     order_pool_.return_order(target);
 
-    // db_manager_.remove_order(id);
+    //db_manager_.remove_order(id);
 
     //std::cout << "cancelled Limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
@@ -101,8 +97,6 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
     auto prev_price = target->price_;
     auto prev_limit = target->parent_;
     auto prev_size = target->size;
-
-
 
     if (prev_price != new_price) {
         prev_limit->remove_order(target);
@@ -131,7 +125,6 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
     }
 
     update_modify_vol(prev_price, new_price, prev_size, new_size, side, update_possible);
-
     /*
     std::cout << "modified order with id: " << id << std::endl;
     std::cout << "old price: " << prev_price << " new price: " << target->price_ << std::endl;
@@ -139,7 +132,6 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
      */
     //db_manager_.modify_order(id, new_price, new_size, unix_time);
 }
-
 
 void Orderbook::trade_order(uint64_t id, int32_t price, uint32_t size, bool side) {
     auto og_size = size;
@@ -270,14 +262,13 @@ std::string Orderbook::get_formatted_time_fast() const {
     if (now != last_second) {
         last_second = now;
         struct tm tm_buf;
-        localtime_r(&now, &tm_buf);  // Use localtime_r instead of gmtime_r
+        localtime_r(&now, &tm_buf);
         strftime(last_second_str, sizeof(last_second_str), "%Y-%m-%d %H:%M:%S", &tm_buf);
     }
 
     snprintf(buffer, sizeof(buffer), "%s.%03d", last_second_str, static_cast<int>(ms.count()));
     return std::string(buffer);
 }
-
 
 std::string Orderbook::get_formatted_time() const {
     auto time_t = std::chrono::system_clock::to_time_t(current_message_time_);
@@ -306,8 +297,6 @@ void Orderbook::calculate_imbalance() {
     }
     imbalance_ = static_cast<double>(static_cast<int64_t>(bid_vol_) - static_cast<int64_t>(ask_vol_)) / static_cast<double>(total_vol);
 }
-
-
 
 int32_t Orderbook::get_best_bid_price() const { return bids_.begin()->first; }
 

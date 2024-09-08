@@ -13,7 +13,6 @@ private:
     DatabaseManager& db_manager_;
     bool first_update = false;
 
-
 public:
     Backtester(Orderbook& book, DatabaseManager& db_manager)
             : book_(book), db_manager_(db_manager), count_(0) {}
@@ -23,8 +22,8 @@ public:
     }
 
     void run(const std::vector<message> &messages) {
-        const std::string start_time = "2024-05-24 09:30:00.000";
-        const std::string end_time = "2024-05-24 16:00:00.000";
+        const std::string start_time = "2024-05-28 09:30:00.000";
+        const std::string end_time = "2024-05-28 16:00:00.000";
 
         for (const auto &msg : messages) {
             ++count_;
@@ -39,9 +38,10 @@ public:
                 book_.calculate_vols();
             }
 
+            if (count_ % 100 == 0) {
+                db_manager_.update_limit_orderbook(book_.bids_, book_.offers_);
 
-
-            //db_manager_.update_limit_orderbook(book_.bids_, book_.offers_);
+            }
             if (curr_time >= start_time) {
                 //book_.calculate_vols();
                 book_.calculate_imbalance();
@@ -55,7 +55,6 @@ public:
             }
         }
     }
-
 };
 
 

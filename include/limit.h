@@ -11,9 +11,9 @@
 class Limit {
 public:
     explicit Limit(Order* new_order);
-    Limit(float price);
+    Limit(int32_t price);
 
-    float price_;
+    int32_t price_;
     uint64_t volume_;
     uint32_t num_orders_;
     Order* head_;
@@ -23,12 +23,12 @@ public:
 
     void add_order(Order* new_order);
     void remove_order(Order* target);
-    uint64_t get_price();
+    int32_t get_price();
     uint64_t get_volume();
     uint32_t get_size();
     bool is_empty();
     void reset();
-    void set(float price);
+    void set(int32_t price);
 };
 
 

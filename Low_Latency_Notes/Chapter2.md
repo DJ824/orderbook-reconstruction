@@ -99,4 +99,8 @@ for the first time, the resolution is performned at runtime, bigger initial cost
 so there is no need for the OS to find and resolve the dependencies befoat runtime, bigger upside is taht this creates an opportunity for for the program to be super optimized at compile and linking time, to yield lower latencies at runtime 
 - downside is the applicationa binary is larger and each binary that relies on the same set of external libs has a copy of all the code, low latency mainly uses static linking to minimize runtime performance latencies 
 
+ 
+
+
+
 

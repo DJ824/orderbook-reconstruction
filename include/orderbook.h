@@ -163,7 +163,6 @@ public:
         vol += new_size * new_in_range;
     }
 
-
     std::map<int32_t, Limit *, std::less<>> offers_;
     std::map<int32_t, Limit *, std::greater<>> bids_;
     std::string get_formatted_time_fast() const;

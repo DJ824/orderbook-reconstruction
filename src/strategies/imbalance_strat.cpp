@@ -61,7 +61,6 @@ private:
         int trade_count = buy_qty_ + sell_qty_;
 
         logger_->log(timestamp, bid, ask, position_, trade_count, pnl_);
-        //db_manager_.log_trading_data(timestamp, bid, ask, position_, trade_count, pnl_, book.imbalance_);
     }
 
 public:
@@ -69,10 +68,10 @@ public:
             : position_(0), buy_qty_(0), sell_qty_(0),
               real_total_buy_px_(0), real_total_sell_px_(0),
               theo_total_buy_px_(0), theo_total_sell_px_(0),
-              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(50),
+              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(100),
               POINT_VALUE_(5.0), FEES_PER_SIDE_(52),
               db_manager_(db_manager) {
-        logger_ = std::make_unique<AsyncLogger>("imbalance_strat_log.csv", true);
+        logger_ = std::make_unique<AsyncLogger>("imbalance_strat_log.csv", db_manager, true);
     }
 
     void on_book_update(const Orderbook& book) override {

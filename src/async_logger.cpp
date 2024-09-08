@@ -1,3 +1,4 @@
+#pragma once
 #include <atomic>
 #include <thread>
 #include <sys/mman.h>
@@ -7,6 +8,8 @@
 #include <iomanip>
 #include <sstream>
 #include "../include/concurrentqueue.h"
+#include "database.cpp"
+
 
 class AsyncLogger {
 private:
@@ -28,6 +31,7 @@ private:
     size_t buffer_offset_;
     std::mutex console_mutex_;
     bool console_output_;
+    DatabaseManager& db_manager_;
 
     void logging_loop() {
         while (running_ || log_queue_.size_approx() > 0) {
@@ -38,11 +42,48 @@ private:
                 if (console_output_) {
                     write_to_console(log_line);
                 }
+                send_to_database(entry);
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
         flush_buffer();
+    }
+
+    uint64_t format_timestamp(const std::string& timestamp) {
+        std::tm tm = {};
+        std::istringstream ss(timestamp);
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+
+        tm.tm_hour -= 5;
+
+        auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+
+        int milliseconds = 0;
+        size_t dot_pos = timestamp.find('.');
+        if (dot_pos != std::string::npos) {
+            milliseconds = std::stoi(timestamp.substr(dot_pos + 1, 3));
+        }
+
+        tp += std::chrono::milliseconds(milliseconds);
+
+        auto duration = tp.time_since_epoch();
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+    }
+
+    void send_to_database(const log_entry& entry) {
+        uint64_t formatted_timestamp = format_timestamp(entry.timestamp);
+        std::stringstream line_protocol;
+        line_protocol << "trading_log "
+                      << "bid=" << entry.bid << "i,"
+                      << "ask=" << entry.ask << "i,"
+                      << "position=" << entry.position << "i,"
+                      << "trade_count=" << entry.trade_count << "i,"
+                      << "pnl=" << std::fixed << std::setprecision(6) << entry.pnl
+                      << " " << formatted_timestamp;
+
+        db_manager_.send_line_protocol_tcp(line_protocol.str() + "\n");
+
     }
 
     void write_to_buffer(const std::string& log_line) {
@@ -76,9 +117,9 @@ private:
     }
 
 public:
-    explicit AsyncLogger(const std::string& log_file, bool console_output = false, size_t buffer_size = 10485760)
-            : buffer_size_(buffer_size), buffer_offset_(0), console_output_(console_output) {
-        log_fd_ = open(log_file.c_str(), O_RDWR | O_CREAT , S_IRUSR | S_IWUSR);
+    AsyncLogger(const std::string& log_file, DatabaseManager& db_manager, bool console_output = false, size_t buffer_size = 10485760)
+            : buffer_size_(buffer_size), buffer_offset_(0), console_output_(console_output), db_manager_(db_manager) {
+        log_fd_ = open(log_file.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
         if (log_fd_ == -1) {
             throw std::runtime_error("failed to open log file");
         }

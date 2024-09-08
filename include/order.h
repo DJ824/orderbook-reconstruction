@@ -15,10 +15,10 @@ class Limit;
 
 class Order {
 public:
-    Order(uint64_t order_id, float price, uint32_t order_size, bool order_side, uint64_t order_unix_time);
+    Order(uint64_t order_id, int32_t price, uint32_t order_size, bool order_side, uint64_t order_unix_time);
     Order();
     uint64_t id_;
-    float price_;
+    int32_t price_;
     uint32_t size;
     bool side_;
     uint64_t unix_time_;

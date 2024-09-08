@@ -5,6 +5,7 @@
 #include "orderbook.h"
 #include "backtester.cpp"
 #include "strategies/imbalance_strat.cpp"
+#include "strategies/skew_strat.cpp"
 
 int main() {
     try {
@@ -12,14 +13,14 @@ int main() {
         Orderbook book(db_manager);
 
         auto parsing_start = std::chrono::high_resolution_clock::now();
-        auto parser = std::make_unique<Parser>("glbx-mdp3-20240524.mbo_filtered_adjusted_selected_columns.csv");
-        std::cout << "Parsing messages... " << std::endl;
+        auto parser = std::make_unique<Parser>("es0528.csv");
+        std::cout << "parsing messages... " << std::endl;
         parser->parse();
         auto parsing_end = std::chrono::high_resolution_clock::now();
         auto parsing_duration = std::chrono::duration_cast<std::chrono::duration<double>>(parsing_end - parsing_start);
-        std::cout << "Parsing completed in " << parsing_duration.count() << " seconds" << std::endl;
+        std::cout << "parsing completed in " << parsing_duration.count() << " seconds" << std::endl;
 
-        std::cout << "Processing into book" << std::endl;
+        std::cout << "processing into book" << std::endl;
         auto strategy = std::make_unique<ImbalanceStrat>(db_manager);
 
         Backtester backtester(book, db_manager);
@@ -30,8 +31,7 @@ int main() {
         auto backtesting_end = std::chrono::high_resolution_clock::now();
         auto backtesting_duration = std::chrono::duration_cast<std::chrono::duration<double>>(backtesting_end - backtesting_start);
 
-        std::cout << "Backtesting completed in " << backtesting_duration.count() << " seconds" << std::endl;
-        std::cout << "Current book count: " << book.get_count() << std::endl;
+        std::cout << "backtesting completed in " << backtesting_duration.count() << " seconds" << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "An error occurred: " << e.what() << std::endl;
