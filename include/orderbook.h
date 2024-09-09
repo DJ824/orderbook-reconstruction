@@ -1,7 +1,3 @@
-//
-// Created by Devang Jaiswal on 6/27/24.
-//
-
 #ifndef DATABENTO_ORDERBOOK_ORDERBOOK_H
 #define DATABENTO_ORDERBOOK_ORDERBOOK_H
 
@@ -50,34 +46,14 @@ public:
     // imbalance calculations
     int32_t bid_vol_;
     int32_t ask_vol_;
-    int32_t bid_vol_check_;
-    int32_t ask_vol_check_;
-    void intial_calculation() {
-        bid_vol_check_ = 0;
-        ask_vol_check_ = 0;
-        auto bid_it = bids_.begin();
-        auto offer_it = offers_.begin();
-        int count = 0;
-        while (count < 100) {
-            bid_vol_check_ += bid_it->second->volume_;
-            ++bid_it;
-            ++count;
-        }
 
-        count = 0;
-        while (count < 100) {
-            ask_vol_check_ += offer_it->second->volume_;
-            ++offer_it;
-            ++count;
-        }
-    }
+    std::string last_reset_time_;
 
     double imbalance_;
     void calculate_imbalance();
 
     uint64_t get_bid_depth() const;
     uint64_t get_ask_depth() const;
-
 
     void add_limit_order(uint64_t id, int32_t price, uint32_t size, bool side, uint64_t unix_time);
     void modify_order(uint64_t id, int32_t new_price, uint32_t new_size, bool side, uint64_t unix_time);
@@ -112,7 +88,10 @@ public:
                 trade_order(msg.id_, msg.price_, msg.size_, msg.side_);
                 break;
         }
+
     }
+
+
 
     inline void calculate_vols() {
         bid_vol_ = 0;

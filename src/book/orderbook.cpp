@@ -1,6 +1,3 @@
-//
-// Created by Devang Jaiswal on 6/27/24.
-//
 #include <iostream>
 #include <iomanip>
 #include <numeric>
@@ -221,7 +218,6 @@ void Orderbook::trade_order(uint64_t id, int32_t price, uint32_t size, bool side
             }
         }
     }
-
 
     //db_manager_.send_market_order_to_gui(price, og_size, side, unix_time);
     sum1_ += ((float) og_size * price);

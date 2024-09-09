@@ -4,7 +4,6 @@
 #include <map>
 #include "strategy.h"
 #include "../async_logger.cpp"
-#include "../database.cpp"
 
 class ImbalanceStrat : public Strategy {
 private:
@@ -68,7 +67,7 @@ public:
             : position_(0), buy_qty_(0), sell_qty_(0),
               real_total_buy_px_(0), real_total_sell_px_(0),
               theo_total_buy_px_(0), theo_total_sell_px_(0),
-              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(10),
+              fees_(0), pnl_(0), prev_pnl_(0), max_pos_(5),
               POINT_VALUE_(5.0), FEES_PER_SIDE_(52),
               db_manager_(db_manager) {
         logger_ = std::make_unique<AsyncLogger>("imbalance_strat_log.csv", db_manager, true);

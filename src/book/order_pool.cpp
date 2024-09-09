@@ -1,6 +1,3 @@
-//
-// Created by Devang Jaiswal on 7/23/24.
-//
 
 #include "order_pool.h"
 

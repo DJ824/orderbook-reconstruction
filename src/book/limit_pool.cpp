@@ -1,6 +1,4 @@
-//
-// Created by Devang Jaiswal on 7/4/24.
-//
+
 /*
 #include "limit_pool.h"
 

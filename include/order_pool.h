@@ -1,7 +1,3 @@
-//
-// Created by Devang Jaiswal on 7/23/24.
-//
-
 
 #ifndef DATABENTO_ORDERBOOK_ORDER_POOL_H
 #define DATABENTO_ORDERBOOK_ORDER_POOL_H

@@ -1,6 +1,3 @@
-//
-// Created by Devang Jaiswal on 6/27/24.
-//
 
 #ifndef DATABENTO_ORDERBOOK_LIMIT_H
 #define DATABENTO_ORDERBOOK_LIMIT_H

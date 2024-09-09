@@ -1,6 +1,4 @@
-//
-// Created by Devang Jaiswal on 8/29/24.
-//
+
 
 #include "strategy.h"
 #include <vector>

@@ -15,13 +15,13 @@ Parser::~Parser() {
 void Parser::parse() {
     int fd = open(file_path_.c_str(), O_RDONLY);
     if (fd == -1) {
-        std::cerr << "Error opening file: " << file_path_ << std::endl;
+        std::cerr << "error opening file: " << file_path_ << std::endl;
         return;
     }
 
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        std::cerr << "Error getting file size" << std::endl;
+        std::cerr << "error getting file size" << std::endl;
         close(fd);
         return;
     }
@@ -31,7 +31,7 @@ void Parser::parse() {
     close(fd);
 
     if (mapped_file_ == MAP_FAILED) {
-        std::cerr << "Error mapping file" << std::endl;
+        std::cerr << "error mapping file" << std::endl;
         return;
     }
 

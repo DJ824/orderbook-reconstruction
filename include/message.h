@@ -1,6 +1,3 @@
-//
-// Created by Devang Jaiswal on 7/29/24.
-//
 
 #ifndef DATABENTO_ORDERBOOK_MESSAGE_H
 #define DATABENTO_ORDERBOOK_MESSAGE_H

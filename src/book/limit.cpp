@@ -1,6 +1,3 @@
-//
-// Created by Devang Jaiswal on 6/27/24.
-//
 
 #include "limit.h"
 

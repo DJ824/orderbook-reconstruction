@@ -1,7 +1,3 @@
-//
-// Created by Devang Jaiswal on 7/4/24.
-//
-
 
 /*
 #ifndef DATABENTO_ORDERBOOK_LIMIT_POOL_H

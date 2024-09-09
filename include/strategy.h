@@ -1,6 +1,4 @@
-//
-// Created by Devang Jaiswal on 8/29/24.
-//
+
 #include "orderbook.h"
 #pragma once
 class Strategy {
