@@ -9,6 +9,7 @@
 #include <sstream>
 #include "../include/concurrentqueue.h"
 #include "database.cpp"
+#include "../include/lock_free_queue.h"
 
 
 class AsyncLogger {
@@ -23,7 +24,8 @@ private:
     };
 
     std::atomic<bool> running_{true};
-    moodycamel::ConcurrentQueue<log_entry> log_queue_;
+    //moodycamel::ConcurrentQueue<log_entry> log_queue_;
+    LockFreeQueue<log_entry, 1000000> log_queue_;
     std::thread logging_thread_;
     int log_fd_;
     char* log_buffer_;
@@ -34,9 +36,10 @@ private:
     DatabaseManager& db_manager_;
 
     void logging_loop() {
-        while (running_ || log_queue_.size_approx() > 0) {
-            log_entry entry;
-            if (log_queue_.try_dequeue(entry)) {
+        while (running_ || !log_queue_.empty()) {
+            std::optional<log_entry> maybe_entry = log_queue_.dequeue();
+            if (maybe_entry) {
+                log_entry entry = *maybe_entry;
                 std::string log_line = format_log_entry(entry);
                 write_to_buffer(log_line);
                 if (console_output_) {
@@ -154,7 +157,7 @@ public:
              int trade_count, float pnl) {
         log_entry entry{timestamp, bid, ask, position,
                         trade_count, pnl};
-        log_queue_.enqueue(std::move(entry));
+        log_queue_.enqueue(entry);
     }
 
     void set_console_output(bool enable) {
