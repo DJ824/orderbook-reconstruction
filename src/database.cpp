@@ -7,16 +7,13 @@
 #include <chrono>
 #include <map>
 #include <thread>
-#include <fstream>
-#include <utility>
-#include <vector>
-#include <queue>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
 #include <nlohmann/json.hpp>
 #include "limit.h"
+#include "lock_free_queue.h"
 
 class DatabaseManager {
 private:
@@ -26,63 +23,88 @@ private:
     struct sockaddr_in serv_addr_;
     std::thread db_thread_;
     std::thread orderbook_thread_;
-    std::queue<std::string> db_queue_;
-    std::mutex db_mutex_;
-    std::condition_variable db_cv_;
+    std::unique_ptr<LockFreeQueue<std::string, 1000000>> db_queue_;
     std::atomic<bool> stop_threads_{false};
 
     struct OrderBookUpdate {
-        std::vector<std::pair<int32_t, uint64_t>> bids;
-        std::vector<std::pair<int32_t, uint64_t>> offers;
-        uint64_t timestamp;
+        std::vector<std::pair<int32_t, uint64_t>> bids_;
+        std::vector<std::pair<int32_t, uint64_t>> offers_;
+        uint64_t timestamp_;
     };
-    std::queue<OrderBookUpdate> orderbook_queue_;
-    std::mutex orderbook_mutex_;
-    std::condition_variable orderbook_cv_;
+    std::unique_ptr<LockFreeQueue<OrderBookUpdate, 1000000>> orderbook_queue_;
 
 public:
-    DatabaseManager(std::string host, int port) : tcp_host_(std::move(host)), tcp_port_(port), sock_(-1) {
+    DatabaseManager(std::string host, int port)
+            : tcp_host_(std::move(host)), tcp_port_(port), sock_(-1),
+              db_queue_(std::make_unique<LockFreeQueue<std::string, 1000000>>()),
+              orderbook_queue_(std::make_unique<LockFreeQueue<OrderBookUpdate, 1000000>>())
+    {
         memset(&serv_addr_, 0, sizeof(serv_addr_));
         serv_addr_.sin_family = AF_INET;
         serv_addr_.sin_port = htons(tcp_port_);
         if (inet_pton(AF_INET, tcp_host_.c_str(), &serv_addr_.sin_addr) <= 0) {
-            std::cerr << "Invalid address: " << tcp_host_ << std::endl;
+            std::cerr << "invalid address: " << tcp_host_ << std::endl;
         }
 
         db_thread_ = std::thread(&DatabaseManager::process_database_queue, this);
         orderbook_thread_ = std::thread(&DatabaseManager::process_orderbook_queue, this);
     }
 
+    DatabaseManager(const DatabaseManager&) = delete;
+    DatabaseManager& operator=(const DatabaseManager&) = delete;
+
+    DatabaseManager(DatabaseManager&& other) noexcept
+            : tcp_host_(std::move(other.tcp_host_)),
+              tcp_port_(other.tcp_port_),
+              sock_(other.sock_),
+              serv_addr_(other.serv_addr_),
+              db_queue_(std::move(other.db_queue_)),
+              orderbook_queue_(std::move(other.orderbook_queue_)),
+              stop_threads_(other.stop_threads_.load())
+    {
+        other.sock_ = -1;
+        if (other.db_thread_.joinable()) {
+            other.db_thread_.join();
+        }
+        if (other.orderbook_thread_.joinable()) {
+            other.orderbook_thread_.join();
+        }
+        db_thread_ = std::thread(&DatabaseManager::process_database_queue, this);
+        orderbook_thread_ = std::thread(&DatabaseManager::process_orderbook_queue, this);
+    }
+
+    DatabaseManager& operator=(DatabaseManager&& other) noexcept {
+        if (this != &other) {
+            stop_threads_ = true;
+            if (db_thread_.joinable()) db_thread_.join();
+            if (orderbook_thread_.joinable()) orderbook_thread_.join();
+            if (sock_ != -1) close(sock_);
+
+            tcp_host_ = std::move(other.tcp_host_);
+            tcp_port_ = other.tcp_port_;
+            sock_ = other.sock_;
+            serv_addr_ = other.serv_addr_;
+            db_queue_ = std::move(other.db_queue_);
+            orderbook_queue_ = std::move(other.orderbook_queue_);
+            stop_threads_ = other.stop_threads_.load();
+
+            other.sock_ = -1;
+            if (other.db_thread_.joinable()) other.db_thread_.join();
+            if (other.orderbook_thread_.joinable()) other.orderbook_thread_.join();
+
+            db_thread_ = std::thread(&DatabaseManager::process_database_queue, this);
+            orderbook_thread_ = std::thread(&DatabaseManager::process_orderbook_queue, this);
+        }
+        return *this;
+    }
+
     ~DatabaseManager() {
         stop_threads_ = true;
-
-        db_cv_.notify_all();
-        orderbook_cv_.notify_all();
-
-        if (db_thread_.joinable()) {
-            db_thread_.join();
-        }
-        if (orderbook_thread_.joinable()) {
-            orderbook_thread_.join();
-        }
-
+        if (db_thread_.joinable()) db_thread_.join();
+        if (orderbook_thread_.joinable()) orderbook_thread_.join();
         if (sock_ != -1) {
             close(sock_);
             sock_ = -1;
-        }
-
-        flush_remaining_data();
-    }
-
-    void flush_remaining_data() {
-        std::lock_guard<std::mutex> db_lock(db_mutex_);
-        while (!db_queue_.empty()) {
-            db_queue_.pop();
-        }
-
-        std::lock_guard<std::mutex> ob_lock(orderbook_mutex_);
-        while (!orderbook_queue_.empty()) {
-            orderbook_queue_.pop();
         }
     }
 
@@ -117,74 +139,32 @@ public:
     }
 
     void send_line_protocol_tcp(const std::string &line_protocol) {
-        {
-            std::lock_guard<std::mutex> lock(db_mutex_);
-            db_queue_.push(line_protocol);
-        }
-        db_cv_.notify_one();
+        db_queue_->enqueue(line_protocol);
     }
 
     void process_database_queue() {
-        while (!stop_threads_) {
-            std::unique_lock<std::mutex> lock(db_mutex_);
-            db_cv_.wait(lock, [this] { return !db_queue_.empty() || stop_threads_; });
-
-            while (!db_queue_.empty()) {
-                std::string line_protocol = db_queue_.front();
-                db_queue_.pop();
-                lock.unlock();
-
+        while (!stop_threads_ || !db_queue_->empty()) {
+            std::optional<std::string> line_protocol = db_queue_->dequeue();
+            if (line_protocol) {
                 if (connect_to_server()) {
-                    ssize_t sent_bytes = send(sock_, line_protocol.c_str(), line_protocol.length(), 0);
+                    ssize_t sent_bytes = send(sock_, line_protocol->c_str(), line_protocol->length(), 0);
                     if (sent_bytes < 0) {
                         std::cerr << "error sending data: " << strerror(errno) << std::endl;
                         close(sock_);
                         sock_ = -1;
                     }
                 }
-                lock.lock();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
     }
-    /*
-    void add_order(uint64_t id, float price, uint32_t size, bool side, uint64_t unix_time) {
-        std::stringstream line_protocol;
-        line_protocol << "orders price=" << price
-                      << ",size=" << size << "i"
-                      << ",side=" << (side ? "true" : "false")
-                      << ",id=" << id << "i"
-                      << ",status=\"active\""
-                      << " " << unix_time << "\n";
-        send_line_protocol_tcp(line_protocol.str());
-    }
-
-    void remove_order(uint64_t id) {
-        uint64_t current_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-
-        std::stringstream line_protocol;
-        line_protocol << "orders id=" << id << "i"
-                      << ",status=\"cancelled\""
-                      << " " << current_time << "\n";
-        send_line_protocol_tcp(line_protocol.str());
-    }
-
-    void modify_order(uint64_t id, float new_price, uint32_t new_size, uint64_t unix_time) {
-        std::stringstream line_protocol;
-        line_protocol << "orders price=" << new_price
-                      << ",size=" << new_size << "i"
-                      << ",id=" << id << "i"
-                      << ",status=\"active\""
-                      << " " << unix_time << "\n";
-        send_line_protocol_tcp(line_protocol.str());
-    }
-    */
 
     template<typename BidCompare, typename AskCompare>
-    void update_limit_orderbook(const std::map<int32_t, Limit *, BidCompare> &bids,
-                                const std::map<int32_t, Limit *, AskCompare> &offers) {
+    inline void update_limit_orderbook(const std::map<int32_t, Limit *, BidCompare> &bids,
+                                       const std::map<int32_t, Limit *, AskCompare> &offers) {
         OrderBookUpdate update;
-        update.timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        update.timestamp_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
 
         auto process_side = [](const auto &side, std::vector<std::pair<int32_t, uint64_t>> &update_side) {
@@ -195,26 +175,16 @@ public:
             }
         };
 
-        process_side(bids, update.bids);
-        process_side(offers, update.offers);
+        process_side(bids, update.bids_);
+        process_side(offers, update.offers_);
 
-        {
-            std::lock_guard<std::mutex> lock(orderbook_mutex_);
-            orderbook_queue_.push(std::move(update));
-        }
-        orderbook_cv_.notify_one();
+        orderbook_queue_->enqueue(std::move(update));
     }
 
-    void process_orderbook_queue() {
-        while (!stop_threads_) {
-            std::unique_lock<std::mutex> lock(orderbook_mutex_);
-            orderbook_cv_.wait(lock, [this] { return !orderbook_queue_.empty() || stop_threads_; });
-
-            while (!orderbook_queue_.empty()) {
-                auto update = std::move(orderbook_queue_.front());
-                orderbook_queue_.pop();
-                lock.unlock();
-
+    inline void process_orderbook_queue() {
+        while (!stop_threads_ || !orderbook_queue_->empty()) {
+            std::optional<OrderBookUpdate> update = orderbook_queue_->dequeue();
+            if (update) {
                 std::vector<std::string> db_updates;
 
                 auto format_data = [&](const auto &side, bool is_bid) {
@@ -224,19 +194,19 @@ public:
                                       << "price=" << price << "i,"
                                       << "volume=" << static_cast<long>(volume) << "i,"
                                       << "side=" << (is_bid ? "true" : "false")
-                                      << " " << update.timestamp;
+                                      << " " << update->timestamp_;
                         db_updates.push_back(line_protocol.str());
                     }
                 };
 
-                format_data(update.bids, true);
-                format_data(update.offers, false);
+                format_data(update->bids_, true);
+                format_data(update->offers_, false);
 
                 for (const auto &update_str : db_updates) {
                     send_line_protocol_tcp(update_str + "\n");
                 }
-
-                lock.lock();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
     }

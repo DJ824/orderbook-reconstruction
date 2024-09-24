@@ -10,16 +10,4 @@ OrderPool::OrderPool(size_t initial_size) {
     }
 }
 
-Order *OrderPool::get_order() {
-    if (available_orders.empty()) {
-        pool.push_back(std::make_unique<Order>());
-        return pool.back().get();
-    }
-    Order* order = available_orders.back();
-    available_orders.pop_back();
-    return order;
-}
 
-void OrderPool::return_order(Order *order) {
-    available_orders.push_back(order);
-}

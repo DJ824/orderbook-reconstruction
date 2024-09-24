@@ -20,8 +20,8 @@ public:
     }
 
     void run(const std::vector<message> &messages) {
-        const std::string start_time = "2024-05-24 09:30:00.000";
-        const std::string end_time = "2024-05-24 16:00:00.000";
+        const std::string start_time = "2024-06-03 09:30:00.000";
+        const std::string end_time = "2024-06-03 16:00:00.000";
         std::string prev_time;
 
         for (const auto &msg : messages) {
@@ -29,6 +29,7 @@ public:
             book_.process_msg(msg);
 
             std::string curr_time = book_.get_formatted_time_fast();
+            //std::cout << curr_time << std::endl;
             if (count_ < 14000 && !first_update) {
                 book_.calculate_vols();
                 first_update = true;
@@ -58,6 +59,7 @@ public:
             if (curr_time >= end_time) {
                 break;
             }
+
 
         }
     }

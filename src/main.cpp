@@ -9,11 +9,12 @@
 
 int main() {
     try {
+        std::cout << 11 << std::endl;
         DatabaseManager db_manager("127.0.0.1", 9009);
         Orderbook book(db_manager);
 
         auto parsing_start = std::chrono::high_resolution_clock::now();
-        auto parser = std::make_unique<Parser>("es0524.csv");
+        auto parser = std::make_unique<Parser>("es0603.csv");
         std::cout << "parsing messages... " << std::endl;
         parser->parse();
         auto parsing_end = std::chrono::high_resolution_clock::now();
@@ -34,7 +35,7 @@ int main() {
         std::cout << "backtesting completed in " << backtesting_duration.count() << " seconds" << std::endl;
 
     } catch (const std::exception& e) {
-        std::cerr << "An error occurred: " << e.what() << std::endl;
+        std::cerr << "an error occurred: " << e.what() << std::endl;
         return 1;
     }
 

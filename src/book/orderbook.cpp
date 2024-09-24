@@ -3,14 +3,13 @@
 #include <numeric>
 #include "orderbook.h"
 
-Orderbook::Orderbook(DatabaseManager& db_manager) : bids_(), offers_(), order_lookup_(), limit_lookup_(), order_pool_(1000000), db_manager_(db_manager)  {
-    bid_count_ = 0;
-    ask_count_ = 0;
-
-    bids_.get_allocator().allocate(200);
-    offers_.get_allocator().allocate(200);
+Orderbook::Orderbook(DatabaseManager& db_manager)
+        : db_manager_(db_manager), order_pool_(1000000), bid_count_(0), ask_count_(0) {
+    bids_.get_allocator().allocate(1000);
+    offers_.get_allocator().allocate(1000);
     order_lookup_.reserve(1000000);
-};
+    limit_lookup_.reserve(2000);
+}
 
 Orderbook::~Orderbook() {
     for (auto& pair : bids_) {
@@ -21,76 +20,86 @@ Orderbook::~Orderbook() {
     }
 }
 
-void Orderbook::add_limit_order(uint64_t id, int32_t price, uint32_t size, bool side, uint64_t unix_time) {
-    //order *new_order = new order(id, price, size, side, unix_time);
+template<bool Side>
+typename BookSide<Side>::MapType& Orderbook::get_book_side() {
+    if constexpr (Side) {
+        return bids_;
+    } else {
+        return offers_;
+    }
+}
 
+template<bool Side>
+Limit* Orderbook::get_or_insert_limit(int32_t price) {
+    std::pair<int32_t, bool> key = std::make_pair(price, Side);
+    auto it = limit_lookup_.find(key);
+    if (it == limit_lookup_.end()) {
+        auto* new_limit = new Limit(price);
+        get_book_side<Side>()[price] = new_limit;
+        new_limit->side_ = Side;
+        limit_lookup_[key] = new_limit;
+        return new_limit;
+    } else {
+        return it->second;
+    }
+}
+
+
+template<bool Side>
+void Orderbook::add_limit_order(uint64_t id, int32_t price, uint32_t size, uint64_t unix_time) {
     Order* new_order = order_pool_.get_order();
     new_order->id_ = id;
     new_order->price_ = price;
     new_order->size = size;
-    new_order->side_ = side;
+    new_order->side_ = Side;
     new_order->unix_time_ = unix_time;
 
-    Limit* curr_limit = get_or_insert_limit(side, price);
+    Limit* curr_limit = get_or_insert_limit<Side>(price);
     order_lookup_[id] = new_order;
     curr_limit->add_order(new_order);
-    //curr_limit->price_ = price;
-    if (side) {
+
+    if constexpr (Side) {
         ++bid_count_;
     } else {
         ++ask_count_;
     }
-   // std::cout << id << std::endl;
 
-    update_vol(price, size, side, true, update_possible);
-    //db_manager_.add_order(id, price, size, side, unix_time);
-    // std::cout << "added Limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
+    update_vol<Side>(price, size, true);
 }
 
-void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size, bool side) {
-    Order *target = order_lookup_[id];
+
+template<bool Side>
+void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size) {
+    Order* target = order_lookup_[id];
     auto curr_limit = target->parent_;
     order_lookup_.erase(id);
     curr_limit->remove_order(target);
     if (curr_limit->is_empty()) {
-        if (target->side_) {
-            bids_.erase(price);
-        } else {
-            offers_.erase(price);
-        }
-        std::pair<int32_t , bool> key = std::make_pair(price, side);
+        get_book_side<Side>().erase(price);
+        std::pair<int32_t, bool> key = std::make_pair(price, Side);
         limit_lookup_.erase(key);
         target->parent_ = nullptr;
     }
 
-    if (side) {
+    if constexpr (Side) {
         --bid_count_;
     } else {
         --ask_count_;
     }
-    //delete target;
 
-    update_vol(price, size, side, false, update_possible);
-
+    update_vol<Side>(price, size, false);
     order_pool_.return_order(target);
-
-    //db_manager_.remove_order(id);
-
-    //std::cout << "cancelled Limit order with id: " << id << " size: " << size << " price: " << price << std::endl;
 }
 
 
-void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, bool side, uint64_t unix_time) {
+template<bool Side>
+void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, uint64_t unix_time) {
     if (order_lookup_.find(id) == order_lookup_.end()) {
-        add_limit_order(id, new_price, new_size, side, unix_time);
+        add_limit_order<Side>(id, new_price, new_size, unix_time);
         return;
     }
 
-    Order *target = order_lookup_[id];
-    if (target->side_ != side) {
-        throw std::logic_error("cannot switch sides");
-    }
-
+    Order* target = order_lookup_[id];
     auto prev_price = target->price_;
     auto prev_limit = target->parent_;
     auto prev_size = target->size;
@@ -98,15 +107,11 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
     if (prev_price != new_price) {
         prev_limit->remove_order(target);
         if (prev_limit->is_empty()) {
-            if (side) {
-                bids_.erase(prev_price);
-            } else {
-                offers_.erase(prev_price);
-            }
-            std::pair<int32_t , bool> key = std::make_pair(prev_price, side);
+            get_book_side<Side>().erase(prev_price);
+            std::pair<int32_t, bool> key = std::make_pair(prev_price, Side);
             limit_lookup_.erase(key);
         }
-        Limit *new_limit = get_or_insert_limit(side, new_price);
+        Limit* new_limit = get_or_insert_limit<Side>(new_price);
         target->size = new_size;
         target->price_ = new_price;
         target->unix_time_ = unix_time;
@@ -121,129 +126,82 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
         target->unix_time_ = unix_time;
     }
 
-    update_modify_vol(prev_price, new_price, prev_size, new_size, side, update_possible);
-    /*
-    std::cout << "modified order with id: " << id << std::endl;
-    std::cout << "old price: " << prev_price << " new price: " << target->price_ << std::endl;
-    std::cout << "old size: " << prev_size << " new size: " << target->size << std::endl;
-     */
-    //db_manager_.modify_order(id, new_price, new_size, unix_time);
+    update_modify_vol<Side>(prev_price, new_price, prev_size, new_size);
 }
 
-void Orderbook::trade_order(uint64_t id, int32_t price, uint32_t size, bool side) {
+template<bool Side>
+void Orderbook::trade_order(uint64_t id, int32_t price, uint32_t size) {
     auto og_size = size;
-    if (side) {
-        if (offers_.empty()) {
-            return;
-        }
-        auto trade_limit = get_or_insert_limit(false, price);
-        auto offer_it = trade_limit->head_;
-        while (offer_it != nullptr) {
-            if (size == offer_it->size) {
-                offer_it->filled_ = true;
-                /*
-                std::cout << "filled order with id: " << offer_it->id_ << " size: " << offer_it->size << " price: "
-                          << offer_it->price_ << std::endl;
-                          */
-                size = 0;
-                break;
-            } else if (size < offer_it->size) {
-                offer_it->size -= size;
-                ask_vol_ -= size;
-                /*
-                std::cout << "market order filled" << std::endl;
-                std::cout << "size reduced for order id: " << offer_it->id_ << " new size: " << offer_it->size
-                          << std::endl;
-                          */
-                size = 0;
-                break;
-            } else {
-                size -= offer_it->size;
-                offer_it->filled_ = true;
-                if (size == 0) {
-                    /*
-                    std::cout << "market order fully filled" << std::endl;
-                    std::cout << "filled order with id: " << offer_it->id_ << " size: " << offer_it->size << " price: "
-                              << offer_it->price_ << std::endl;
-                              */
-                    break;
-                }
-                /*
-                std::cout << "filled order with id: " << offer_it->id_ << " size: " << offer_it->size << " price: "
-                          << offer_it->price_ << std::endl;
-                */
-                offer_it = offer_it->next_;
-            }
-        }
-    } else {
-        if (bids_.empty()) {
-            return;
-        }
-        auto trade_limit = get_or_insert_limit(true, price);
-        auto bid_it = trade_limit->head_;
-        while (bid_it != nullptr) {
-            if (size == bid_it->size) {
-                bid_it->filled_ = true;
-                /*
-                std::cout << "filled order with id: " << bid_it->id_ << " size: " << bid_it->size << " price: "
-                          << bid_it->price_ << std::endl;
-                          */
-                size = 0;
-                break;
-            } else if (size < bid_it->size) {
-                bid_it->size -= size;
-                bid_vol_ -= size;
-                /*
-                std::cout << "market order filled" << std::endl;
-                std::cout << "size reduced for order id: " << bid_it->id_ << " new size: " << bid_it->size << std::endl;
-                 */
-                size = 0;
-                break;
-            } else {
-                size -= bid_it->size;
-                bid_it->filled_ = true;
-                if (size == 0) {
-                    /*
-                    std::cout << "market order filled" << std::endl;
-                    std::cout << "filled order with id: " << bid_it->id_ << " size: " << bid_it->size << " price: "
-                              << bid_it->price_ << std::endl;
-                              */
-                    break;
-                }
-                /*
-                std::cout << "filled order with id: " << bid_it->id_ << " size: " << bid_it->size << " price: "
-                          << bid_it->price_ << std::endl;
-                */
-                 bid_it = bid_it->next_;
-            }
-        }
+    auto& opposite_side = get_book_side<!Side>();
+
+    if (opposite_side.empty()) {
+        return;
     }
 
-    //db_manager_.send_market_order_to_gui(price, og_size, side, unix_time);
-    sum1_ += ((float) og_size * price);
-    sum2_ += ((float) og_size);
-    vwap_ = sum1_ / sum2_;
+    auto trade_limit = get_or_insert_limit<!Side>(price);
+    auto it = trade_limit->head_;
+
+    while (it != nullptr) {
+        if (size == it->size) {
+            it->filled_ = true;
+            size = 0;
+            break;
+        } else if (size < it->size) {
+            it->size -= size;
+            get_volume<!Side>() -= size;
+            size = 0;
+            break;
+        } else {
+            size -= it->size;
+            it->filled_ = true;
+            if (size == 0) {
+                break;
+            }
+            it = it->next_;
+        }
+    }
+    calculate_vwap(price, og_size);
+
 }
 
-Limit *Orderbook::get_or_insert_limit(bool side, int32_t price) {
-    std::pair<int32_t, bool> key = std::make_pair(price, side);
-    auto it = limit_lookup_.find(key);
-    if (it == limit_lookup_.end()) {
-        auto* new_limit = new Limit(price);
-        if (side) {
-            bids_[price] = new_limit;
-            new_limit->side_ = true;
-            //update_best_bid();
-        } else {
-            offers_[price] = new_limit;
-            new_limit->side_ = false;
-            //update_best_offer();
-        }
-        limit_lookup_[key] = new_limit;
-        return new_limit;
+template<bool Side>
+int32_t& Orderbook::get_volume()  {
+    if constexpr (Side) {
+        return bid_vol_;
     } else {
-        return it->second;
+        return ask_vol_;
     }
+}
+
+
+template<bool Side>
+void Orderbook::update_vol(int32_t price, int32_t size, bool is_add) {
+    if (!update_possible) {
+        return;
+    }
+
+    int32_t& vol = Side ? bid_vol_ : ask_vol_;
+    int32_t best_price = Side ? get_best_bid_price() : get_best_ask_price();
+
+    if (std::abs(price - best_price) <= 2000) {
+        vol += is_add ? size : -size;
+    }
+}
+
+template<bool Side>
+void Orderbook::update_modify_vol(int32_t og_price, int32_t new_price, int32_t og_size, int32_t new_size) {
+    if (!update_possible) {
+        return;
+    }
+
+    int32_t best_price = Side ? get_best_bid_price() : get_best_ask_price();
+    int32_t& vol = Side ? bid_vol_ : ask_vol_;
+
+    int32_t og_in_range = (std::abs(og_price - best_price) <= 2000);
+    int32_t new_in_range = (std::abs(new_price - best_price) <= 2000);
+
+    vol -= og_size * og_in_range;
+    vol += new_size * new_in_range;
 }
 
 std::string Orderbook::get_formatted_time_fast() const {
@@ -270,8 +228,8 @@ std::string Orderbook::get_formatted_time_fast() const {
 
 void Orderbook::calculate_skew() {
     skew_ = log10(get_bid_depth()) - log10(get_ask_depth());
-
 }
+
 
 void Orderbook::calculate_imbalance() {
     uint64_t total_vol = bid_vol_ + ask_vol_;
@@ -286,13 +244,32 @@ int32_t Orderbook::get_best_bid_price() const { return bids_.begin()->first; }
 
 int32_t Orderbook::get_best_ask_price() const { return offers_.begin()->first; }
 
-Limit* Orderbook::get_best_bid() { return bids_[0]; }
-
-Limit* Orderbook::get_best_ask() { return offers_[0]; }
-
 uint64_t Orderbook::get_count() const { return bid_count_ + ask_count_; }
 
 uint64_t Orderbook::get_bid_depth() const { return bids_.begin()->second->volume_; }
 
 uint64_t Orderbook::get_ask_depth() const { return offers_.begin()->second->volume_; }
 
+template void Orderbook::trade_order<true>(uint64_t, int32_t, uint32_t);
+template void Orderbook::trade_order<false>(uint64_t, int32_t, uint32_t);
+template void Orderbook::modify_order<true>(uint64_t, int32_t, uint32_t, uint64_t);
+template void Orderbook::modify_order<false>(uint64_t, int32_t, uint32_t, uint64_t);
+template void Orderbook::remove_order<true>(uint64_t, int32_t, uint32_t);
+template void Orderbook::remove_order<false>(uint64_t, int32_t, uint32_t);
+template void Orderbook::add_limit_order<true>(uint64_t, int32_t, uint32_t, uint64_t);
+template void Orderbook::add_limit_order<false>(uint64_t, int32_t, uint32_t, uint64_t);
+
+template typename BookSide<true>::MapType& Orderbook::get_book_side<true>();
+template typename BookSide<false>::MapType& Orderbook::get_book_side<false>();
+
+template Limit* Orderbook::get_or_insert_limit<true>(int32_t);
+template Limit* Orderbook::get_or_insert_limit<false>(int32_t);
+
+template void Orderbook::update_vol<true>(int32_t, int32_t, bool);
+template void Orderbook::update_vol<false>(int32_t, int32_t, bool);
+
+template void Orderbook::update_modify_vol<true>(int32_t, int32_t, int32_t, int32_t);
+template void Orderbook::update_modify_vol<false>(int32_t, int32_t, int32_t, int32_t);
+
+template int32_t& Orderbook::get_volume<true>() ;
+template int32_t& Orderbook::get_volume<false>() ;

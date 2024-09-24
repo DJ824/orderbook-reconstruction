@@ -12,8 +12,20 @@ private:
 public:
     explicit OrderPool(size_t);
     //~OrderPool();
-    Order* get_order();
-    void return_order(Order* order);
+    inline Order* get_order() {
+        if (available_orders.empty()) {
+            pool.push_back(std::make_unique<Order>());
+            return pool.back().get();
+        }
+        Order* order = available_orders.back();
+        available_orders.pop_back();
+        return order;
+    }
+
+    inline void return_order(Order* order) {
+        available_orders.push_back(order);
+
+    }
 };
 
 
