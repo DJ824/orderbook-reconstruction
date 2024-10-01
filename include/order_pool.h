@@ -2,6 +2,8 @@
 #ifndef DATABENTO_ORDERBOOK_ORDER_POOL_H
 #define DATABENTO_ORDERBOOK_ORDER_POOL_H
 #include "order.h"
+#include <vector>
+
 
 
 class OrderPool {
