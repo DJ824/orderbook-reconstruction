@@ -41,6 +41,9 @@ public:
         logger_ = std::make_unique<AsyncLogger>(log_file_name, db_manager, true);
     }
 
+    std::queue<std::tuple<bool, int32_t, int32_t>> trade_queue_;
+
+
     virtual ~Strategy() = default;
 
     virtual void on_book_update(const Orderbook& book) = 0;

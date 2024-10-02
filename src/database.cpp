@@ -11,7 +11,7 @@ DatabaseManager::DatabaseManager(std::string host, int port)
         : tcp_host_(std::move(host)), tcp_port_(port), sock_(-1),
           db_queue_(std::make_unique<LockFreeQueue<std::string, 1000000>>()),
           orderbook_queue_(std::make_unique<LockFreeQueue<OrderBookUpdate, 1000000>>())
-    {
+{
     memset(&serv_addr_, 0, sizeof(serv_addr_));
     serv_addr_.sin_family = AF_INET;
     serv_addr_.sin_port = htons(tcp_port_);

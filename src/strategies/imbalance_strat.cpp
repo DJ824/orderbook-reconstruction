@@ -90,8 +90,11 @@ public:
 
             if (imbalance > 0 && mid_price < book.vwap_ && position_ + trade_size <= max_pos_) {
                 execute_trade(true, book.get_best_ask_price(), trade_size);
+                trade_queue_.emplace(true, book.get_best_ask_price(), trade_size);
+
             } else if (imbalance < 0 && mid_price > book.vwap_ && position_ - trade_size >= -max_pos_) {
                 execute_trade(false, book.get_best_bid_price(), trade_size);
+                trade_queue_.emplace(false, book.get_best_bid_price(), trade_size);
             }
 
             update_theo_values(book);

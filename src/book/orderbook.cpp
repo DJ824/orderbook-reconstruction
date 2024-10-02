@@ -70,7 +70,11 @@ void Orderbook::add_limit_order(uint64_t id, int32_t price, uint32_t size, uint6
 
 template<bool Side>
 void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size) {
-    Order* target = order_lookup_[id];
+    if (id == 6413326828552) {
+        std::cout << order_lookup_[id]->id_ << std::endl;
+        std::cout << order_lookup_[id]->size;
+    }
+    auto target = order_lookup_[id];
     auto curr_limit = target->parent_;
     order_lookup_.erase(id);
     curr_limit->remove_order(target);
