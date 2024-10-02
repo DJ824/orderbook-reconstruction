@@ -76,7 +76,6 @@ https://gifyu.com/image/S1vuT
 - Optimization via low latency techniques - todo 
 
 ## Visualization 
-<img width="899" alt="image" src="https://github.com/user-attachments/assets/b95389a0-15f7-4773-8cff-2eeba34af2de">
+<img width="1034" alt="image" src="https://github.com/user-attachments/assets/495ddf02-db2d-466d-9ec9-25821e9fbc58">
 
-https://www.youtube.com/watch?v=0h6425tUcWI
 
