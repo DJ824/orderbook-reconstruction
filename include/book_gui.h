@@ -1,4 +1,3 @@
-// book_gui.h
 #pragma once
 
 #include <QWidget>
