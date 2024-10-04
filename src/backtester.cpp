@@ -1,3 +1,4 @@
+
 #include "backtester.h"
 #include <QDateTime>
 #include <QCoreApplication>
@@ -27,8 +28,6 @@ void Backtester::add_strategy(std::unique_ptr<Strategy> strategy) {
 }
 
 void Backtester::handleStartSignal() {
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[Backtester] handleStartSignal called on thread:" << QThread::currentThreadId();
     start_backtest();
 }
 
@@ -66,16 +65,15 @@ void Backtester::update_gui() {
     int32_t bid = book_.get_best_bid_price();
     int32_t ask = book_.get_best_ask_price();
     std::string time_string = book_.get_formatted_time_fast();
+    int32_t pnl = strategies_[0]->get_pnl();
 
     QDateTime date_time = QDateTime::fromString(QString::fromStdString(time_string), "yyyy-MM-dd HH:mm:ss.zzz");
     qint64 timestamp = date_time.toMSecsSinceEpoch();
 
-    emit update_chart(timestamp, bid, ask);
+    emit update_chart(timestamp, bid, ask, pnl);
 }
 
 void Backtester::run_backtest() {
-    log(QString("run_backtest started on thread: %1").arg((quint64) QThread::currentThreadId()));
-
     if (current_message_index_ == 0) {
         log("Starting backtest from the beginning...");
     } else {
@@ -91,22 +89,21 @@ void Backtester::run_backtest() {
     QElapsedTimer update_timer;
     update_timer.start();
 
+    std::string prev_time;
+
     while (running_ && current_message_index_ < messages_.size()) {
-        if (current_message_index_ % 10000 == 0) {
-            log(QString("Processing message %1 of %2")
-                        .arg(current_message_index_)
-                        .arg(messages_.size()));
-        }
 
         const auto &msg = messages_[current_message_index_];
         book_.process_msg(msg);
 
         std::string curr_time = book_.get_formatted_time_fast();
+        //std::cout << curr_time << std::endl;
 
-        if (curr_time >= start_time_ && update_timer.elapsed() >= 16) {
+
+        if (curr_time >= start_time_ && update_timer.elapsed() >= 20) {
             update_gui();
             update_timer.restart();
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 16);
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         }
 
         if (current_message_index_ < 14000 && !first_update_) {
@@ -114,24 +111,24 @@ void Backtester::run_backtest() {
             first_update_ = true;
         }
 
-        if (current_message_index_ % 1000 == 0) {
-            book_.calculate_vols();
-        }
-
         if (current_message_index_ % 100 == 0) {
             db_manager_.update_limit_orderbook(book_.bids_, book_.offers_);
+            book_.calculate_vols();
+
         }
 
         if (curr_time >= start_time_) {
             book_.calculate_imbalance();
+            // run strat every 2 seconds in book time
+            if (std::strcmp(curr_time.c_str() + 17, prev_time.c_str() + 17) >= 2) {
+                for (auto &strategy: strategies_) {
+                    strategy->on_book_update(book_);
 
-            for (auto &strategy: strategies_) {
-                strategy->on_book_update(book_);
-
-                while (!strategy->trade_queue_.empty()) {
-                    auto [is_buy, price, size] = strategy->trade_queue_.front();
-                    strategy->trade_queue_.pop();
-                    emit trade_executed(QString::fromStdString(curr_time), is_buy, price, size);
+                    while (!strategy->trade_queue_.empty()) {
+                        auto [is_buy, price, size] = strategy->trade_queue_.front();
+                        strategy->trade_queue_.pop();
+                        emit trade_executed(QString::fromStdString(curr_time), is_buy, price, size);
+                    }
                 }
             }
         }
@@ -139,9 +136,6 @@ void Backtester::run_backtest() {
         if (current_message_index_ % 10000 == 0) {
             int progress = static_cast<int>((static_cast<double>(current_message_index_) / messages_.size()) * 100);
             emit update_progress(progress);
-            log(QString("Processed %1 messages, Progress: %2%")
-                        .arg(current_message_index_)
-                        .arg(progress));
         }
 
         if (curr_time >= end_time_) {
@@ -154,6 +148,7 @@ void Backtester::run_backtest() {
         }
 
         ++current_message_index_;
+        prev_time = curr_time;
     }
 
     log(QString("run_backtest finished. Processed %1 messages in %2 seconds")

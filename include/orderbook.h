@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <boost/functional/hash.hpp>
 #include <utility>
+#include <arm_neon.h>
 #include <iterator>
 #include "order.h"
 #include "limit.h"
@@ -129,50 +130,35 @@ public:
     }
 
     inline void calculate_vols() {
-        bid_vol_ = 0;
-        ask_vol_ = 0;
+        uint32x4_t bid_vol_vec = vdupq_n_u32(0);
+        uint32x4_t ask_vol_vec = vdupq_n_u32(0);
 
         auto bid_it = bids_.begin();
         auto bid_end = bids_.end();
-        for (int i = 0; i < 80 && bid_it != bid_end; i += 4) {
-            if (bid_it != bid_end) {
-                bid_vol_ += bid_it->second->volume_;
-                ++bid_it;
-            }
-            if (bid_it != bid_end) {
-                bid_vol_ += bid_it->second->volume_;
-                ++bid_it;
-            }
-            if (bid_it != bid_end) {
-                bid_vol_ += bid_it->second->volume_;
-                ++bid_it;
-            }
-            if (bid_it != bid_end) {
-                bid_vol_ += bid_it->second->volume_;
-                ++bid_it;
-            }
-        }
-
         auto ask_it = offers_.begin();
         auto ask_end = offers_.end();
-        for (int i = 0; i < 80 && ask_it != ask_end; i += 4) {
-            if (ask_it != ask_end) {
-                ask_vol_ += ask_it->second->volume_;
-                ++ask_it;
+
+        for (int i = 0; i < 80 && (bid_it != bid_end || ask_it != ask_end); i += 4) {
+            uint32_t bid_chunk[4] = {0, 0, 0, 0};
+            uint32_t ask_chunk[4] = {0, 0, 0, 0};
+
+            for (int j = 0; j < 4; ++j) {
+                if (bid_it != bid_end) {
+                    bid_chunk[j] = bid_it->second->volume_;
+                    ++bid_it;
+                }
+                if (ask_it != ask_end) {
+                    ask_chunk[j] = ask_it->second->volume_;
+                    ++ask_it;
+                }
             }
-            if (ask_it != ask_end) {
-                ask_vol_ += ask_it->second->volume_;
-                ++ask_it;
-            }
-            if (ask_it != ask_end) {
-                ask_vol_ += ask_it->second->volume_;
-                ++ask_it;
-            }
-            if (ask_it != ask_end) {
-                ask_vol_ += ask_it->second->volume_;
-                ++ask_it;
-            }
+
+            bid_vol_vec = vaddq_u32(bid_vol_vec, vld1q_u32(bid_chunk));
+            ask_vol_vec = vaddq_u32(ask_vol_vec, vld1q_u32(ask_chunk));
         }
+
+        bid_vol_ = vaddvq_u32(bid_vol_vec);
+        ask_vol_ = vaddvq_u32(ask_vol_vec);
         update_possible = true;
     }
 

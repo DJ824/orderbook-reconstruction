@@ -1,269 +1,325 @@
 #include "book_gui.h"
-#include <QtCharts/QDateTimeAxis>
-#include <QMargins>
-#include <QGraphicsScene>
-#include <QGraphicsProxyWidget>
-#include <QGraphicsLayout>
+#include "interactive_plot.h"
 #include <QDateTime>
-#include <algorithm>
-#include <QVBoxLayout>
-#include <limits>
-#include <tuple>
-#include <QWheelEvent>
 #include <QDebug>
 #include <QMessageBox>
 
+const int UPDATE_INTERVAL = 1000;
+
 BookGui::BookGui(QWidget *parent)
-        : QWidget(parent), m_bid_series_(new QLineSeries(this)), m_ask_series_(new QLineSeries(this)),
-          m_chart(new QChart()), m_chart_view_(new QChartView(m_chart, this)), m_axis_x_(new QDateTimeAxis()),
-          m_axis_y_(new QValueAxis()), m_update_timer_(new QTimer(this)),
-          m_horizontal_scroll_bar_(new QScrollBar(Qt::Horizontal, this)),
-          m_start_button_(new QPushButton("Start", this)),
-          m_stop_button_(new QPushButton("Stop", this)), m_progress_bar_(new QProgressBar(this)),
-          m_trade_log_table_(new QTableWidget(this)), m_auto_scroll_(true), m_user_scrolling_(false) {
-    setup_chart();
+        : QWidget(parent),
+          m_price_plot(new InteractivePlot(this)),
+          m_pnl_plot(new InteractivePlot(this)),
+          m_update_timer(new QTimer(this)),
+          m_horizontal_scroll_bar(new QScrollBar(Qt::Horizontal, this)),
+          m_start_button(new QPushButton("Start", this)),
+          m_stop_button(new QPushButton("Stop", this)),
+          m_progress_bar(new QProgressBar(this)),
+          m_trade_log_table(new QTableWidget(this)),
+          m_button_layout(new QHBoxLayout()),
+          m_auto_scroll(true),
+          m_user_scrolling(false) {
+
+    setup_plots();
     setup_scroll_bar();
     setup_buttons();
     setup_trade_log();
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    buttonLayout->addWidget(m_start_button_);
-    buttonLayout->addWidget(m_stop_button_);
 
-    mainLayout->addLayout(buttonLayout);
-    mainLayout->addWidget(m_chart_view_, 7);
-    mainLayout->addWidget(m_horizontal_scroll_bar_);
-    mainLayout->addWidget(m_trade_log_table_, 3);
-    mainLayout->addWidget(m_progress_bar_);
+    m_button_layout->addWidget(m_start_button);
+    m_button_layout->addWidget(m_stop_button);
+
+    QPushButton *resetZoomButton = new QPushButton("Reset Zoom", this);
+    connect(resetZoomButton, &QPushButton::clicked, this, &BookGui::reset_zoom);
+    m_button_layout->addWidget(resetZoomButton);
+
+    QHBoxLayout *chartLayout = new QHBoxLayout();
+    chartLayout->addWidget(m_price_plot, 1);
+    chartLayout->addWidget(m_pnl_plot, 1);
+
+    mainLayout->addLayout(m_button_layout);
+    mainLayout->addLayout(chartLayout, 7);
+    mainLayout->addWidget(m_horizontal_scroll_bar);
+    mainLayout->addWidget(m_trade_log_table, 3);
+    mainLayout->addWidget(m_progress_bar);
 
     setLayout(mainLayout);
 
-    connect(m_update_timer_, &QTimer::timeout, this, &BookGui::update_chart);
-    m_update_timer_->start(UPDATE_INTERVAL_);
+    connect(m_update_timer, &QTimer::timeout, this, &BookGui::update_plots);
+    m_update_timer->start(UPDATE_INTERVAL);
+
+    resize(1200, 800);
 }
 
-void BookGui::setup_chart() {
-    m_chart->addSeries(m_bid_series_);
-    m_chart->addSeries(m_ask_series_);
+void BookGui::setup_plots() {
+    m_bid_graph = m_price_plot->addGraph();
+    m_ask_graph = m_price_plot->addGraph();
 
-    m_chart->setTitle("HFT Price Chart");
-    m_chart->legend()->setVisible(true);
-    m_chart->legend()->setAlignment(Qt::AlignBottom);
+    m_bid_graph->setPen(QPen(QColor(4, 165, 229), 2));
+    m_ask_graph->setPen(QPen(QColor(136, 57, 239), 2));
 
-    m_bid_series_->setName("Best Bid");
-    m_ask_series_->setName("Best Ask");
+    m_price_plot->legend->setVisible(false);
 
-    m_bid_series_->setColor(QColor(4, 165, 229));
-    m_ask_series_->setColor(QColor(136, 57, 239));
+    m_bid_graph->setAdaptiveSampling(true);
+    m_ask_graph->setAdaptiveSampling(true);
 
-    m_chart->addAxis(m_axis_x_, Qt::AlignBottom);
-    m_chart->addAxis(m_axis_y_, Qt::AlignRight);
+    m_price_plot->setNotAntialiasedElements(QCP::aeAll);
 
-    m_bid_series_->attachAxis(m_axis_x_);
-    m_bid_series_->attachAxis(m_axis_y_);
-    m_ask_series_->attachAxis(m_axis_x_);
-    m_ask_series_->attachAxis(m_axis_y_);
+    QSharedPointer<QCPAxisTickerDateTime> dateTimeTicker(new QCPAxisTickerDateTime);
+    dateTimeTicker->setDateTimeFormat("hh:mm:ss");
+    m_price_plot->xAxis->setTicker(dateTimeTicker);
 
-    m_axis_x_->setFormat("hh:mm:ss");
-    m_axis_x_->setTickCount(6);
-    m_axis_y_->setLabelFormat("%i");
-    m_axis_y_->setTickCount(NUM_PRICE_TICKS_ + 1);
+    connect(m_price_plot, &InteractivePlot::userInteracted, this, &BookGui::on_user_interacted);
 
-    style_axis_labels(m_axis_x_);
-    style_axis_labels(m_axis_y_);
+    m_pnl_graph = m_pnl_plot->addGraph();
+    m_pnl_graph->setPen(QPen(QColor(0, 255, 0), 2));
 
-    m_chart_view_->setChart(m_chart);
-    m_chart_view_->setRenderHint(QPainter::Antialiasing);
+    m_pnl_plot->legend->setVisible(false);
 
-    m_chart->setBackgroundBrush(QBrush(Qt::black));
-    m_chart->setPlotAreaBackgroundBrush(QBrush(Qt::black));
-    m_chart->setPlotAreaBackgroundVisible(true);
+    m_pnl_graph->setAdaptiveSampling(true);
 
-    m_chart->layout()->setContentsMargins(0, 0, 0, 0);
-    m_chart->setMargins(QMargins(0, 0, 0, 0));
-    m_chart_view_->setRubberBand(QChartView::NoRubberBand);
+    m_pnl_plot->setNotAntialiasedElements(QCP::aeAll);
+
+    m_pnl_plot->xAxis->setTicker(dateTimeTicker);
+
+    connect(m_pnl_plot, &InteractivePlot::userInteracted, this, &BookGui::on_user_interacted);
+
+    style_plot(m_price_plot);
+    style_plot(m_pnl_plot);
+}
+
+void BookGui::style_plot(QCustomPlot *plot) {
+    plot->setBackground(QBrush(Qt::black));
+    plot->xAxis->setBasePen(QPen(Qt::white, 1));
+    plot->yAxis->setBasePen(QPen(Qt::white, 1));
+    plot->xAxis->setTickPen(QPen(Qt::white, 1));
+    plot->yAxis->setTickPen(QPen(Qt::white, 1));
+    plot->xAxis->setSubTickPen(QPen(Qt::white, 1));
+    plot->yAxis->setSubTickPen(QPen(Qt::white, 1));
+    plot->xAxis->setTickLabelColor(Qt::white);
+    plot->yAxis->setTickLabelColor(Qt::white);
+    plot->xAxis->grid()->setPen(QPen(QColor(140, 140, 140), 1, Qt::DotLine));
+    plot->yAxis->grid()->setPen(QPen(QColor(140, 140, 140), 1, Qt::DotLine));
+    plot->xAxis->grid()->setSubGridPen(QPen(QColor(80, 80, 80), 1, Qt::DotLine));
+    plot->yAxis->grid()->setSubGridPen(QPen(QColor(80, 80, 80), 1, Qt::DotLine));
+    plot->xAxis->grid()->setSubGridVisible(true);
+    plot->yAxis->grid()->setSubGridVisible(true);
+    plot->xAxis->grid()->setZeroLinePen(Qt::NoPen);
+    plot->yAxis->grid()->setZeroLinePen(Qt::NoPen);
+    plot->xAxis->setLabel("Time");
+    plot->yAxis->setLabel("Price");
+    plot->xAxis->setLabelColor(Qt::white);
+    plot->yAxis->setLabelColor(Qt::white);
+}
+
+void BookGui::add_data_point(qint64 timestamp, double bestBid, double bestAsk, double pnl) {
+    double timeInSeconds = timestamp / 1000.0;
+
+    m_bid_graph->addData(timeInSeconds, bestBid);
+    m_ask_graph->addData(timeInSeconds, bestAsk);
+    m_pnl_graph->addData(timeInSeconds, pnl);
+
+    if (m_bid_graph->data()->size() == 1) {
+        m_price_plot->xAxis->setRange(timeInSeconds, timeInSeconds + 1.0);
+        m_pnl_plot->xAxis->setRange(timeInSeconds, timeInSeconds + 1.0);
+
+        m_price_plot->yAxis->setRange(bestBid - 1, bestAsk + 1);
+        m_pnl_plot->yAxis->setRange(pnl - 1, pnl + 1);
+    }
+
+    update_scroll_bar();
+
+    update_plots();
+}
+
+void BookGui::update_plots() {
+    if (isVisible()) {
+        update_price_plot();
+        update_pnl_plot();
+    }
+}
+
+void BookGui::update_price_plot() {
+    if (m_bid_graph->data()->isEmpty() || m_ask_graph->data()->isEmpty()) return;
+
+    if (m_auto_scroll) {
+        m_price_plot->yAxis->rescale();
+    }
+
+    if (m_auto_scroll) {
+        bool foundRange;
+        QCPRange keyRange = m_bid_graph->data()->keyRange(foundRange);
+        if (foundRange) {
+            double keyStart = keyRange.lower;
+            double keyEnd = keyRange.upper;
+
+            if (keyEnd - keyStart < 1.0) {
+                keyEnd = keyStart + 1.0;
+            }
+
+            m_price_plot->xAxis->setRange(keyStart, keyEnd);
+        }
+    }
+
+    m_price_plot->replot();
+}
+
+void BookGui::update_pnl_plot() {
+    if (m_pnl_graph->data()->isEmpty()) return;
+
+    if (m_auto_scroll) {
+        m_pnl_plot->yAxis->rescale();
+    }
+
+    if (m_auto_scroll) {
+        bool foundRange;
+        QCPRange keyRange = m_pnl_graph->data()->keyRange(foundRange);
+        if (foundRange) {
+            double keyStart = keyRange.lower;
+            double keyEnd = keyRange.upper;
+
+            if (keyEnd - keyStart < 1.0) {
+                keyEnd = keyStart + 1.0;
+            }
+
+            m_pnl_plot->xAxis->setRange(keyStart, keyEnd);
+        }
+    }
+
+    m_pnl_plot->replot();
 }
 
 void BookGui::setup_scroll_bar() {
-    m_horizontal_scroll_bar_->setOrientation(Qt::Horizontal);
-    m_horizontal_scroll_bar_->setFixedHeight(15);
-    connect(m_horizontal_scroll_bar_, &QScrollBar::valueChanged, this, &BookGui::handle_horizontal_scroll_bar_value_changes);
-    connect(m_horizontal_scroll_bar_, &QScrollBar::sliderPressed, [this]() {
-        m_auto_scroll_ = false;
-        m_user_scrolling_ = true;
+    m_horizontal_scroll_bar->setOrientation(Qt::Horizontal);
+    m_horizontal_scroll_bar->setFixedHeight(15);
+    connect(m_horizontal_scroll_bar, &QScrollBar::valueChanged, this, &BookGui::handle_horizontal_scroll_bar_value_changes);
+    connect(m_horizontal_scroll_bar, &QScrollBar::sliderPressed, [this]() {
+        m_user_scrolling = true;
     });
-    connect(m_horizontal_scroll_bar_, &QScrollBar::sliderReleased, [this]() {
-        m_user_scrolling_ = false;
+    connect(m_horizontal_scroll_bar, &QScrollBar::sliderReleased, [this]() {
+        m_user_scrolling = false;
     });
 }
 
-void BookGui::setup_buttons() {
-    m_stop_button_->setEnabled(false);
-    connect(m_start_button_, &QPushButton::clicked, this, &BookGui::handle_start_button_click);
-    connect(m_stop_button_, &QPushButton::clicked, this, &BookGui::handle_stop_button_click);
-}
+void BookGui::update_scroll_bar() {
+    bool foundRange;
+    QCPRange timeRange = m_bid_graph->data()->keyRange(foundRange);
+    if (foundRange) {
+        double minTime = timeRange.lower;
+        double maxTime = timeRange.upper;
 
-void BookGui::setup_trade_log() {
-    m_trade_log_table_->setColumnCount(4);
-    m_trade_log_table_->setHorizontalHeaderLabels({"Timestamp", "Side", "Price", "Size"});
-    m_trade_log_table_->verticalHeader()->setVisible(false);
-    m_trade_log_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_trade_log_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_trade_log_table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_trade_log_table_->setStyleSheet("QTableWidget { border: none; }");
-    m_trade_log_table_->horizontalHeader()->setStretchLastSection(true);
-}
+        int minTimeMs = static_cast<int>(minTime * 1000);
+        int maxTimeMs = static_cast<int>(maxTime * 1000);
 
-void BookGui::add_data_point(qint64 timestamp, double bestBid, double bestAsk) {
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[BookGui] New data point:" << timestamp << bestBid << bestAsk;
-    m_data_points_.emplace_back(timestamp, bestBid, bestAsk);
+        int pageStepMs = maxTimeMs - minTimeMs;
 
-    if (m_data_points_.size() > MAX_POINTS_) {
-        m_data_points_.pop_front();
-    }
-
-    update_chart();
-}
-
-void BookGui::update_chart() {
-    if (m_data_points_.empty()) return;
-
-    QVector<QPointF> bidPoints, askPoints;
-    bidPoints.reserve(m_data_points_.size());
-    askPoints.reserve(m_data_points_.size());
-
-    qint64 latestTimestamp = std::get<0>(m_data_points_.back());
-    qint64 oldestTimestamp = std::get<0>(m_data_points_.front());
-
-    double minPrice = std::numeric_limits<double>::max();
-    double maxPrice = std::numeric_limits<double>::lowest();
-
-    for (const auto &point : m_data_points_) {
-        qint64 timestamp = std::get<0>(point);
-        double bestBid = std::get<1>(point);
-        double bestAsk = std::get<2>(point);
-
-        if (timestamp >= m_axis_x_->min().toMSecsSinceEpoch() &&
-            timestamp <= m_axis_x_->max().toMSecsSinceEpoch()) {
-            minPrice = std::min({minPrice, bestBid, bestAsk});
-            maxPrice = std::max({maxPrice, bestBid, bestAsk});
+        if (pageStepMs < 1000) {
+            pageStepMs = 1000;
         }
 
-        bidPoints.append(QPointF(timestamp, bestBid));
-        askPoints.append(QPointF(timestamp, bestAsk));
+        m_horizontal_scroll_bar->setRange(minTimeMs, maxTimeMs);
+        m_horizontal_scroll_bar->setPageStep(pageStepMs);
+
+        if (m_auto_scroll && !m_user_scrolling) {
+            m_horizontal_scroll_bar->setValue(maxTimeMs - pageStepMs);
+        }
+    } else {
+        m_horizontal_scroll_bar->setRange(0, 0);
     }
-
-    m_bid_series_->replace(bidPoints);
-    m_ask_series_->replace(askPoints);
-
-
-    double range = maxPrice - minPrice;
-    double levelHeight = std::ceil(range / 14.0 / PRICE_INTERVAL_) * PRICE_INTERVAL_;
-    double yMin = std::floor(minPrice / PRICE_INTERVAL_) * PRICE_INTERVAL_;
-    double yMax = yMin + 15 * levelHeight;
-
-    m_axis_y_->setRange(yMin, yMax);
-    m_axis_y_->setTickCount(16);
-
-    int scrollBarRange = latestTimestamp - oldestTimestamp - VISIBLE_TIME_RANGE_;
-    m_horizontal_scroll_bar_->setRange(0, scrollBarRange > 0 ? scrollBarRange : 0);
-    m_horizontal_scroll_bar_->setPageStep(VISIBLE_TIME_RANGE_);
-
-    if (m_auto_scroll_ && !m_user_scrolling_) {
-        m_horizontal_scroll_bar_->setValue(scrollBarRange);
-        qint64 visibleStartTimestamp = latestTimestamp - VISIBLE_TIME_RANGE_;
-        m_axis_x_->setRange(QDateTime::fromMSecsSinceEpoch(visibleStartTimestamp),
-                            QDateTime::fromMSecsSinceEpoch(latestTimestamp));
-    } else if (!m_user_scrolling_) {
-        qint64 visibleStartTimestamp = oldestTimestamp + m_horizontal_scroll_bar_->value();
-        m_axis_x_->setRange(QDateTime::fromMSecsSinceEpoch(visibleStartTimestamp),
-                            QDateTime::fromMSecsSinceEpoch(visibleStartTimestamp + VISIBLE_TIME_RANGE_));
-    }
-}
-
-void BookGui::style_axis_labels(QAbstractAxis *axis) {
-    QFont font = axis->labelsFont();
-    font.setPointSize(10);
-    axis->setLabelsFont(font);
-    axis->setLabelsColor(Qt::white);
-    axis->setGridLineColor(QColor(100, 100, 100));
-    axis->setGridLineVisible(true);
-
-    QPen axisPen(Qt::white);
-    axisPen.setWidth(2);
-    axis->setLinePen(axisPen);
 }
 
 void BookGui::handle_horizontal_scroll_bar_value_changes(int value) {
-    if (m_data_points_.empty() || m_auto_scroll_) return;
+    if (m_user_scrolling) {
+        if (m_bid_graph->data()->isEmpty()) return;
 
-    qint64 oldestTimestamp = std::get<0>(m_data_points_.front());
-    qint64 visibleStartTimestamp = oldestTimestamp + value;
+        int pageStepMs = m_horizontal_scroll_bar->pageStep();
 
-    m_axis_x_->setRange(QDateTime::fromMSecsSinceEpoch(visibleStartTimestamp),
-                        QDateTime::fromMSecsSinceEpoch(visibleStartTimestamp + VISIBLE_TIME_RANGE_));
+        double keyStart = value / 1000.0;
+        double keyEnd = (value + pageStepMs) / 1000.0;
 
-    update_chart();
+        m_price_plot->xAxis->setRange(keyStart, keyEnd);
+        m_pnl_plot->xAxis->setRange(keyStart, keyEnd);
+
+        m_price_plot->replot();
+        m_pnl_plot->replot();
+
+        m_auto_scroll = false;
+    }
+}
+
+void BookGui::setup_buttons() {
+    m_stop_button->setEnabled(false);
+    connect(m_start_button, &QPushButton::clicked, this, &BookGui::handle_start_button_click);
+    connect(m_stop_button, &QPushButton::clicked, this, &BookGui::handle_stop_button_click);
+
+}
+
+void BookGui::setup_trade_log() {
+    m_trade_log_table->setColumnCount(4);
+    m_trade_log_table->setHorizontalHeaderLabels({"Timestamp", "Side", "Price", "Size"});
+    m_trade_log_table->verticalHeader()->setVisible(false);
+    m_trade_log_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_trade_log_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_trade_log_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_trade_log_table->setStyleSheet("QTableWidget { border: none; }");
+    m_trade_log_table->horizontalHeader()->setStretchLastSection(true);
 }
 
 void BookGui::handle_start_button_click() {
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[BookGui] Start button clicked on thread:" << QThread::currentThreadId();
-    m_start_button_->setEnabled(false);
-    m_stop_button_->setEnabled(true);
-    m_auto_scroll_ = true;
+    m_start_button->setEnabled(false);
+    m_stop_button->setEnabled(true);
+    m_auto_scroll = true;
     emit start_backtest();
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[BookGui] start_backtest signal emitted";
 }
 
 void BookGui::handle_stop_button_click() {
-    qDebug() << "Stop button clicked";
-    m_start_button_->setEnabled(true);
-    m_stop_button_->setEnabled(false);
+    m_start_button->setEnabled(true);
+    m_stop_button->setEnabled(false);
     emit stop_backtest();
 }
 
 void BookGui::update_progress(int progress) {
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[BookGui] Progress update:" << progress << "%";
-    m_progress_bar_->setValue(progress);
+    m_progress_bar->setValue(progress);
 }
 
 void BookGui::log_trade(const QString& timestamp, bool is_buy, int32_t price, int size) {
-    int row = m_trade_log_table_->rowCount();
-    m_trade_log_table_->insertRow(row);
-    m_trade_log_table_->setItem(row, 0, new QTableWidgetItem(timestamp));
-    m_trade_log_table_->setItem(row, 1, new QTableWidgetItem(is_buy ? "Buy" : "Sell"));
-    m_trade_log_table_->setItem(row, 2, new QTableWidgetItem(QString::number(price)));
-    m_trade_log_table_->setItem(row, 3, new QTableWidgetItem(QString::number(size)));
-    m_trade_log_table_->scrollToBottom();
+    int row = m_trade_log_table->rowCount();
+    m_trade_log_table->insertRow(row);
+    m_trade_log_table->setItem(row, 0, new QTableWidgetItem(timestamp));
+    m_trade_log_table->setItem(row, 1, new QTableWidgetItem(is_buy ? "Buy" : "Sell"));
+    m_trade_log_table->setItem(row, 2, new QTableWidgetItem(QString::number(price)));
+    m_trade_log_table->setItem(row, 3, new QTableWidgetItem(QString::number(size)));
+    m_trade_log_table->scrollToBottom();
 }
 
 void BookGui::on_backtest_finished() {
     qDebug() << "Backtest finished";
-    m_start_button_->setEnabled(true);
-    m_stop_button_->setEnabled(false);
+    m_start_button->setEnabled(true);
+    m_stop_button->setEnabled(false);
 }
 
 void BookGui::on_backtest_error(const QString& error_message) {
-    qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
-             << "[BookGui] Backtest error:" << error_message;
     QMessageBox::critical(this, "Backtest Error", error_message);
-    m_start_button_->setEnabled(true);
-    m_stop_button_->setEnabled(false);
+    m_start_button->setEnabled(true);
+    m_stop_button->setEnabled(false);
 }
 
 void BookGui::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
-    m_horizontal_scroll_bar_->setGeometry(0, height() - 15, width(), 15);
+    int plotHeight = (height() - 150) * 0.7;
+    m_price_plot->setGeometry(0, 50, width() / 2, plotHeight);
+    m_pnl_plot->setGeometry(width() / 2, 50, width() / 2, plotHeight);
+    m_horizontal_scroll_bar->setGeometry(0, 50 + plotHeight, width(), 15);
 }
 
-void BookGui::wheelEvent(QWheelEvent *event) {
-    QWidget::wheelEvent(event);
-    if (event->angleDelta().y() != 0) {
-        m_horizontal_scroll_bar_->setValue(m_horizontal_scroll_bar_->value() - event->angleDelta().y());
-    }
+void BookGui::on_user_interacted() {
+    m_auto_scroll = false;
+}
+
+void BookGui::reset_zoom() {
+    m_auto_scroll = true;
+    m_price_plot->rescaleAxes();
+    m_pnl_plot->rescaleAxes();
+    update_plots();
 }

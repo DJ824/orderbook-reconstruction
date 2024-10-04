@@ -37,7 +37,7 @@ signals:
     void backtest_finished();
     void update_progress(int progress);
     void trade_executed(const QString& timestamp, bool is_buy, int32_t price, int size);
-    void update_chart(qint64 timestamp, double bestBid, double bestAsk);
+    void update_chart(qint64 timestamp, double bestBid, double bestAsk, int32_t pnl);
     void backtest_error(const QString& error_message);
 
 private:
@@ -63,3 +63,5 @@ private:
                  << "[Backtester]" << message;
     }
 };
+
+
