@@ -108,4 +108,11 @@ public:
             std::cerr << "error: " << e.what() << std::endl;
         }
     }
+
+    void reset() override {
+        Strategy::reset();
+        imbalance_mean_ = 0.0;
+        imbalance_variance_ = 0.0;
+        update_count_ = 0;
+    }
 };

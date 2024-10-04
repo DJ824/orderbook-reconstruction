@@ -3379,11 +3379,11 @@ void QCPDataContainer<DataType>::limitIteratorsToDataRange(const_iterator &begin
 
 /*! \internal
   
-  Increases the preallocation pool to have a size of at least \a minimumPreallocSize. Depending on
+  Increases the preallocation pool_ to have a size of at least \a minimumPreallocSize. Depending on
   the preallocation history, the container will grow by more than requested, to speed up future
   consecutive size increases.
   
-  if \a minimumPreallocSize is smaller than or equal to the current preallocation pool size, this
+  if \a minimumPreallocSize is smaller than or equal to the current preallocation pool_ size, this
   method does nothing.
 */
 template <class DataType>

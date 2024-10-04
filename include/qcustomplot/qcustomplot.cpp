@@ -3986,7 +3986,7 @@ QVector<int> QCPLayout::getSectionSizes(QVector<int> maxSizes, QVector<int> minS
       freeSize = totalSize;
       for (int i=0; i<sectionCount; ++i)
       {
-        if (!minimumLockedSections.contains(i)) // only put sections that haven't hit their minimum back into the pool
+        if (!minimumLockedSections.contains(i)) // only put sections that haven't hit their minimum back into the pool_
           unfinishedSections.append(i);
         else
           freeSize -= sectionSizes.at(i); // remove size of minimum locked sections from available space in next round

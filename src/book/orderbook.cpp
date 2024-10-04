@@ -244,6 +244,14 @@ void Orderbook::calculate_imbalance() {
     imbalance_ = static_cast<double>(static_cast<int64_t>(bid_vol_) - static_cast<int64_t>(ask_vol_)) / static_cast<double>(total_vol);
 }
 
+void Orderbook::reset() {
+    bids_.clear();
+    offers_.clear();
+    order_lookup_.clear();
+    limit_lookup_.clear();
+    order_pool_.reset();
+}
+
 int32_t Orderbook::get_best_bid_price() const { return bids_.begin()->first; }
 
 int32_t Orderbook::get_best_ask_price() const { return offers_.begin()->first; }

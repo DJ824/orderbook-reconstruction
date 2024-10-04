@@ -70,6 +70,8 @@ public:
 
     ~Orderbook();
 
+    void reset();
+
     void calculate_skew();
 
     void calculate_imbalance();

@@ -10,6 +10,7 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QLabel>
 #include "interactive_plot.h"
 
 class BookGui : public QWidget {
@@ -24,10 +25,12 @@ public slots:
     void log_trade(const QString& timestamp, bool is_buy, int32_t price, int size);
     void on_backtest_finished();
     void on_backtest_error(const QString& error_message);
+    void update_orderbook_stats(double vwap, double imbalance, const QString& current_time);
 
 signals:
     void start_backtest();
     void stop_backtest();
+    void restart_backtest();
 
 private:
     InteractivePlot *m_price_plot;
@@ -41,8 +44,10 @@ private:
 
     QPushButton *m_start_button;
     QPushButton *m_stop_button;
+    QPushButton *m_restart_button;
     QProgressBar *m_progress_bar;
     QTableWidget *m_trade_log_table;
+    QTableWidget *m_orderbook_stats_table;
     QHBoxLayout *m_button_layout;
 
     bool m_auto_scroll;
@@ -54,16 +59,20 @@ private:
     void setup_scroll_bar();
     void setup_buttons();
     void setup_trade_log();
+    void setup_orderbook_stats();
+    void clear_orderbook_stats();
     void update_plots();
     void update_price_plot();
     void update_pnl_plot();
     void update_scroll_bar();
     void style_plot(QCustomPlot *plot);
+    void clear_data();
 
 private slots:
     void handle_horizontal_scroll_bar_value_changes(int value);
     void handle_start_button_click();
     void handle_stop_button_click();
+    void handle_restart_button_click();
     void on_user_interacted();
     void reset_zoom();
 

@@ -30,6 +30,7 @@ protected:
     virtual void calculate_pnl() = 0;
     virtual void log_stats(const Orderbook& book) = 0;
 
+
 public:
     Strategy(DatabaseManager& db_manager, int max_pos, int32_t point_value, int32_t fees_per_side, const std::string& log_file_name)
             : position_(0), buy_qty_(0), sell_qty_(0),
@@ -42,6 +43,19 @@ public:
     }
 
     std::queue<std::tuple<bool, int32_t, int32_t>> trade_queue_;
+
+    virtual void reset() {
+        position_ = 0;
+        buy_qty_ = 0;
+        sell_qty_ = 0;
+        real_total_sell_px_ = 0;
+        real_total_buy_px_ = 0;
+        theo_total_buy_px_ = 0;
+        theo_total_sell_px_ = 0;
+        fees_ = 0;
+        pnl_ = 0;
+        prev_pnl_ = 0;
+    }
 
 
     virtual ~Strategy() = default;

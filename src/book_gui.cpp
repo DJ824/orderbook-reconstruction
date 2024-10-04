@@ -5,7 +5,6 @@
 #include <QMessageBox>
 
 const int UPDATE_INTERVAL = 1000;
-
 BookGui::BookGui(QWidget *parent)
         : QWidget(parent),
           m_price_plot(new InteractivePlot(this)),
@@ -14,8 +13,10 @@ BookGui::BookGui(QWidget *parent)
           m_horizontal_scroll_bar(new QScrollBar(Qt::Horizontal, this)),
           m_start_button(new QPushButton("Start", this)),
           m_stop_button(new QPushButton("Stop", this)),
+          m_restart_button(new QPushButton("Restart", this)),
           m_progress_bar(new QProgressBar(this)),
           m_trade_log_table(new QTableWidget(this)),
+          m_orderbook_stats_table(new QTableWidget(this)),
           m_button_layout(new QHBoxLayout()),
           m_auto_scroll(true),
           m_user_scrolling(false) {
@@ -24,11 +25,13 @@ BookGui::BookGui(QWidget *parent)
     setup_scroll_bar();
     setup_buttons();
     setup_trade_log();
+    setup_orderbook_stats();
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     m_button_layout->addWidget(m_start_button);
     m_button_layout->addWidget(m_stop_button);
+    m_button_layout->addWidget(m_restart_button);
 
     QPushButton *resetZoomButton = new QPushButton("Reset Zoom", this);
     connect(resetZoomButton, &QPushButton::clicked, this, &BookGui::reset_zoom);
@@ -38,10 +41,14 @@ BookGui::BookGui(QWidget *parent)
     chartLayout->addWidget(m_price_plot, 1);
     chartLayout->addWidget(m_pnl_plot, 1);
 
+    QHBoxLayout *dataLayout = new QHBoxLayout();
+    dataLayout->addWidget(m_trade_log_table, 1);
+    dataLayout->addWidget(m_orderbook_stats_table, 1);
+
     mainLayout->addLayout(m_button_layout);
     mainLayout->addLayout(chartLayout, 7);
     mainLayout->addWidget(m_horizontal_scroll_bar);
-    mainLayout->addWidget(m_trade_log_table, 3);
+    mainLayout->addLayout(dataLayout, 3);
     mainLayout->addWidget(m_progress_bar);
 
     setLayout(mainLayout);
@@ -50,6 +57,46 @@ BookGui::BookGui(QWidget *parent)
     m_update_timer->start(UPDATE_INTERVAL);
 
     resize(1200, 800);
+}
+
+void BookGui::setup_orderbook_stats() {
+    m_orderbook_stats_table->setColumnCount(2);
+    m_orderbook_stats_table->setHorizontalHeaderLabels({"Metric", "Value"});
+    m_orderbook_stats_table->verticalHeader()->setVisible(false);
+    m_orderbook_stats_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_orderbook_stats_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_orderbook_stats_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_orderbook_stats_table->setStyleSheet("QTableWidget { border: none; }");
+    m_orderbook_stats_table->horizontalHeader()->setStretchLastSection(true);
+
+    m_orderbook_stats_table->setRowCount(3);
+    m_orderbook_stats_table->setItem(0, 0, new QTableWidgetItem("VWAP"));
+    m_orderbook_stats_table->setItem(1, 0, new QTableWidgetItem("Imbalance"));
+    m_orderbook_stats_table->setItem(2, 0, new QTableWidgetItem("Current Time"));
+
+    for (int i = 0; i < 3; ++i) {
+        m_orderbook_stats_table->setItem(i, 1, new QTableWidgetItem(""));
+    }
+}
+
+void BookGui::clear_orderbook_stats() {
+    for (int i = 0; i < m_orderbook_stats_table->rowCount(); ++i) {
+        if (auto item = m_orderbook_stats_table->item(i, 1)) {
+            item->setText("");
+        }
+    }
+}
+
+void BookGui::update_orderbook_stats(double vwap, double imbalance, const QString& current_time) {
+    if (auto item = m_orderbook_stats_table->item(0, 1)) {
+        item->setText(QString::number(vwap, 'f', 2));
+    }
+    if (auto item = m_orderbook_stats_table->item(1, 1)) {
+        item->setText(QString::number(imbalance, 'f', 4));
+    }
+    if (auto item = m_orderbook_stats_table->item(2, 1)) {
+        item->setText(current_time);
+    }
 }
 
 void BookGui::setup_plots() {
@@ -250,10 +297,12 @@ void BookGui::handle_horizontal_scroll_bar_value_changes(int value) {
 
 void BookGui::setup_buttons() {
     m_stop_button->setEnabled(false);
+    m_restart_button->setEnabled(false);
     connect(m_start_button, &QPushButton::clicked, this, &BookGui::handle_start_button_click);
     connect(m_stop_button, &QPushButton::clicked, this, &BookGui::handle_stop_button_click);
-
+    connect(m_restart_button, &QPushButton::clicked, this, &BookGui::handle_restart_button_click);
 }
+
 
 void BookGui::setup_trade_log() {
     m_trade_log_table->setColumnCount(4);
@@ -269,6 +318,7 @@ void BookGui::setup_trade_log() {
 void BookGui::handle_start_button_click() {
     m_start_button->setEnabled(false);
     m_stop_button->setEnabled(true);
+    m_restart_button->setEnabled(false);
     m_auto_scroll = true;
     emit start_backtest();
 }
@@ -276,7 +326,17 @@ void BookGui::handle_start_button_click() {
 void BookGui::handle_stop_button_click() {
     m_start_button->setEnabled(true);
     m_stop_button->setEnabled(false);
+    m_restart_button->setEnabled(true);
     emit stop_backtest();
+}
+
+void BookGui::handle_restart_button_click() {
+    clear_data();
+    m_start_button->setEnabled(false);
+    m_stop_button->setEnabled(true);
+    m_restart_button->setEnabled(false);
+    m_auto_scroll = true;
+    emit restart_backtest();
 }
 
 void BookGui::update_progress(int progress) {
@@ -297,6 +357,17 @@ void BookGui::on_backtest_finished() {
     qDebug() << "Backtest finished";
     m_start_button->setEnabled(true);
     m_stop_button->setEnabled(false);
+    m_restart_button->setEnabled(true);
+}
+
+void BookGui::clear_data() {
+    m_bid_graph->data()->clear();
+    m_ask_graph->data()->clear();
+    m_pnl_graph->data()->clear();
+    m_trade_log_table->setRowCount(0);
+    clear_orderbook_stats();
+    m_progress_bar->setValue(0);
+    update_plots();
 }
 
 void BookGui::on_backtest_error(const QString& error_message) {
@@ -311,7 +382,13 @@ void BookGui::resizeEvent(QResizeEvent *event) {
     m_price_plot->setGeometry(0, 50, width() / 2, plotHeight);
     m_pnl_plot->setGeometry(width() / 2, 50, width() / 2, plotHeight);
     m_horizontal_scroll_bar->setGeometry(0, 50 + plotHeight, width(), 15);
+
+    int dataHeight = height() * 0.3;
+    int dataY = height() - dataHeight - 50;
+    m_trade_log_table->setGeometry(0, dataY, width() / 2, dataHeight);
+    m_orderbook_stats_table->setGeometry(width() / 2, dataY, width() / 2, dataHeight);
 }
+
 
 void BookGui::on_user_interacted() {
     m_auto_scroll = false;

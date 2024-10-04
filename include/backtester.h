@@ -9,6 +9,7 @@
 #include "orderbook.h"
 #include "database.h"
 #include "message.h"
+#include "../src/strategies/imbalance_strat.cpp"
 #include <vector>
 #include <memory>
 #include <atomic>
@@ -26,8 +27,8 @@ public:
 public slots:
     void start_backtest();
     void stop_backtest();
+    void restart_backtest();
     void handleStartSignal();
-
 
 private slots:
     void run_backtest();
@@ -39,6 +40,7 @@ signals:
     void trade_executed(const QString& timestamp, bool is_buy, int32_t price, int size);
     void update_chart(qint64 timestamp, double bestBid, double bestAsk, int32_t pnl);
     void backtest_error(const QString& error_message);
+    void update_orderbook_stats(double vwap, double imbalance, const QString& current_time);
 
 private:
     QTimer *backtest_timer_;
@@ -57,11 +59,10 @@ private:
 
     void update_gui();
     void process_message(const message& msg);
+    void reset_state();
 
     void log(const QString& message) {
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Backtester]" << message;
     }
 };
-
-

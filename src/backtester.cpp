@@ -15,13 +15,30 @@ Backtester::Backtester(Orderbook &book, DatabaseManager &db_manager,
     connect(backtest_timer_, &QTimer::timeout, this, &Backtester::run_backtest);
 }
 
-
 Backtester::~Backtester() {
     if (worker_thread_.isRunning()) {
         worker_thread_.quit();
         worker_thread_.wait();
     }
 }
+
+void Backtester::restart_backtest() {
+    log("Restarting backtest");
+    stop_backtest();
+    reset_state();
+    start_backtest();
+}
+
+void Backtester::reset_state() {
+    current_message_index_ = 0;
+    first_update_ = false;
+    book_.reset();
+    for (auto& strategy : strategies_) {
+        strategy = std::make_unique<ImbalanceStrat>(db_manager_);
+    }
+}
+
+
 
 void Backtester::add_strategy(std::unique_ptr<Strategy> strategy) {
     strategies_.push_back(std::move(strategy));
@@ -71,6 +88,8 @@ void Backtester::update_gui() {
     qint64 timestamp = date_time.toMSecsSinceEpoch();
 
     emit update_chart(timestamp, bid, ask, pnl);
+    emit update_orderbook_stats(book_.vwap_, book_.imbalance_, QString::fromStdString(time_string));
+
 }
 
 void Backtester::run_backtest() {

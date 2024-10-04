@@ -1,4 +1,8 @@
 #include <QApplication>
+#include <QDebug>
+#include <QThread>
+#include <QObject>
+#include <QTime>
 #include "backtester.h"
 #include "parser.h"
 #include "database.h"
@@ -41,6 +45,7 @@ int main(int argc, char *argv[]) {
                  << "[Main] Backtester created on thread:" << QThread::currentThreadId();
         backtester->add_strategy(std::make_unique<ImbalanceStrat>(db_manager));
 
+        // Existing connections
         qDebug() << "Connection established (start_backtest):"
                  << QObject::connect(gui, &BookGui::start_backtest, backtester, &Backtester::handleStartSignal, Qt::QueuedConnection);
         qDebug() << "Connection established (stop_backtest):"
@@ -55,6 +60,12 @@ int main(int argc, char *argv[]) {
                  << QObject::connect(backtester, &Backtester::update_chart, gui, &BookGui::add_data_point, Qt::QueuedConnection);
         qDebug() << "Connection established (backtest_error):"
                  << QObject::connect(backtester, &Backtester::backtest_error, gui, &BookGui::on_backtest_error, Qt::QueuedConnection);
+        qDebug() << "Connection established (update_orderbook_stats):"
+                 << QObject::connect(backtester, &Backtester::update_orderbook_stats, gui, &BookGui::update_orderbook_stats, Qt::QueuedConnection);
+
+        // New connection for restart functionality
+        qDebug() << "Connection established (restart_backtest):"
+                 << QObject::connect(gui, &BookGui::restart_backtest, backtester, &Backtester::restart_backtest, Qt::QueuedConnection);
 
         QObject::connect(backtester, &Backtester::backtest_finished, []() {
             qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
