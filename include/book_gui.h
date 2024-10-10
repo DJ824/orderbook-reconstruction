@@ -38,6 +38,8 @@ private:
     QCPGraph *m_bid_graph;
     QCPGraph *m_ask_graph;
     QCPGraph *m_pnl_graph;
+    QCPGraph *m_buy_trades_graph;  // New graph for buy trades
+    QCPGraph *m_sell_trades_graph; // New graph for sell trades
 
     QTimer *m_update_timer;
     QScrollBar *m_horizontal_scroll_bar;

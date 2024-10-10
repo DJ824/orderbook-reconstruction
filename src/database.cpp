@@ -163,3 +163,120 @@ void DatabaseManager::process_orderbook_queue() {
         }
     }
 }
+
+std::string DatabaseManager::send_query(const std::string& query) {
+    if (!connect_to_server()) {
+        throw std::runtime_error("Failed to connect to QuestDB");
+    }
+
+    // Send the query
+    if (send(sock_, query.c_str(), query.length(), 0) < 0) {
+        throw std::runtime_error("Failed to send query to QuestDB");
+    }
+
+    // Receive the response
+    std::string response;
+    char buffer[4096];
+    ssize_t bytes_received;
+    while ((bytes_received = recv(sock_, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';
+        response += buffer;
+    }
+
+    if (bytes_received < 0) {
+        throw std::runtime_error("Error receiving response from QuestDB");
+    }
+
+    return response;
+}
+
+std::vector<message> DatabaseManager::parse_csv_response(const std::string& response) {
+    std::vector<message> messages;
+    std::istringstream response_stream(response);
+    std::string line;
+
+    // Skip the header line
+    std::getline(response_stream, line);
+
+    while (std::getline(response_stream, line)) {
+        std::istringstream line_stream(line);
+        std::string field;
+        std::vector<std::string> fields;
+
+        while (std::getline(line_stream, field, ',')) {
+            fields.push_back(field);
+        }
+
+        if (fields.size() == 6) {
+            try {
+                uint64_t ts_event = std::stoull(fields[0]);
+                char action = fields[1][0];
+                bool side = (fields[2][0] == 'B');  // 'B' for buy, assume 'S' for sell
+                int32_t price = std::stoi(fields[3]);
+                uint32_t size = std::stoul(fields[4]);
+                uint64_t order_id = std::stoull(fields[5]);
+
+                messages.emplace_back(order_id, ts_event, size, price, action, side);
+            } catch (const std::exception& e) {
+                log_error("Error parsing CSV line: " + line + " - " + e.what());
+                // You might want to skip this line and continue, or handle the error differently
+            }
+        } else {
+            log_error("Invalid number of fields in CSV line: " + line);
+        }
+    }
+
+    return messages;
+}
+
+std::vector<message> DatabaseManager::read_csv_from_questdb() {
+    std::vector<message> all_messages;
+    const size_t page_size = 1000000;  // Adjust based on your needs and memory constraints
+    size_t offset = 0;
+
+    try {
+        while (true) {
+            std::string query = "SELECT * FROM 'es0528.csv' ORDER BY ts_event LIMIT " +
+                                std::to_string(page_size) + " OFFSET " + std::to_string(offset) + ";";
+            std::string response = send_query(query);
+            std::vector<message> page_messages = parse_csv_response(response);
+
+            if (page_messages.empty()) {
+                break;  // No more data to fetch
+            }
+
+            all_messages.insert(all_messages.end(), page_messages.begin(), page_messages.end());
+            offset += page_size;
+
+            log_info("Fetched " + std::to_string(all_messages.size()) + " messages so far...");
+        }
+
+        log_info("Total messages fetched: " + std::to_string(all_messages.size()));
+        return all_messages;
+    } catch (const std::exception& e) {
+        log_error("Error in read_csv_from_questdb: " + std::string(e.what()));
+        throw;
+    }
+}
+
+bool DatabaseManager::test_connection_and_query() {
+    try {
+        std::string query = "SELECT * FROM 'es0528.csv' LIMIT 10;";
+        std::string response = send_query(query);
+        log_info("Query response:\n" + response);
+        return true;
+    } catch (const std::exception& e) {
+        log_error("Error in test_connection_and_query: " + std::string(e.what()));
+        return false;
+    }
+}
+
+void DatabaseManager::log_error(const std::string& error_message) {
+    std::cerr << "DatabaseManager Error: " << error_message << std::endl;
+    // You can add more sophisticated logging here if needed
+}
+
+void DatabaseManager::log_info(const std::string& info_message) {
+    std::cout << "DatabaseManager Info: " << info_message << std::endl;
+    // You can add more sophisticated logging here if needed
+}

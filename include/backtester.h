@@ -18,7 +18,7 @@ class Backtester : public QObject {
 Q_OBJECT
 
 public:
-    explicit Backtester(Orderbook& book, DatabaseManager& db_manager,
+    explicit Backtester(DatabaseManager& db_manager,
                         const std::vector<message>& messages, QObject* parent = nullptr);
     ~Backtester() override;
 
@@ -44,8 +44,8 @@ signals:
 
 private:
     QTimer *backtest_timer_;
+    std::shared_ptr<Orderbook> book_;
 
-    Orderbook &book_;
     std::vector<std::unique_ptr<Strategy>> strategies_;
     DatabaseManager& db_manager_;
     bool first_update_;
@@ -53,8 +53,8 @@ private:
     const int UPDATE_INTERVAL = 1000;
     std::atomic<bool> running_;
     std::vector<message> messages_;
-    const std::string start_time_ = "2024-05-28 09:30:00.000";
-    const std::string end_time_ = "2024-05-28 16:00:00.000";
+    const std::string start_time_ = "2024-06-04 09:30:00.000";
+    const std::string end_time_ = "2024-06-04 16:00:00.000";
     QThread worker_thread_;
 
     void update_gui();

@@ -78,7 +78,7 @@ protected:
 
 public:
     explicit ImbalanceStrat(DatabaseManager& db_manager)
-            : Strategy(db_manager, 10, 5.0, 100, "imbalance_strat_log.csv") {}
+            : Strategy(db_manager, "imbalance_strat_log.csv") {}
 
     void on_book_update(const Orderbook& book) override {
         try {

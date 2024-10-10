@@ -22,15 +22,18 @@ int main(int argc, char *argv[]) {
 
         DatabaseManager db_manager("127.0.0.1", 9009);
 
+
+
         Orderbook book(db_manager);
 
         auto parsing_start = std::chrono::high_resolution_clock::now();
-        auto parser = std::make_unique<Parser>("es0528.csv");
+        auto parser = std::make_unique<Parser>("es0604.csv");
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Main] Parsing messages...";
         parser->parse();
         auto parsing_end = std::chrono::high_resolution_clock::now();
         auto parsing_duration = std::chrono::duration_cast<std::chrono::duration<double>>(parsing_end - parsing_start);
+
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Main] Parsing completed in" << parsing_duration.count() << "seconds";
 
@@ -40,12 +43,11 @@ int main(int argc, char *argv[]) {
         BookGui *gui = new BookGui();
         gui->show();
 
-        Backtester *backtester = new Backtester(book, db_manager, parser->message_stream_);
+        Backtester *backtester = new Backtester(db_manager, parser->message_stream_);
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Main] Backtester created on thread:" << QThread::currentThreadId();
         backtester->add_strategy(std::make_unique<ImbalanceStrat>(db_manager));
 
-        // Existing connections
         qDebug() << "Connection established (start_backtest):"
                  << QObject::connect(gui, &BookGui::start_backtest, backtester, &Backtester::handleStartSignal, Qt::QueuedConnection);
         qDebug() << "Connection established (stop_backtest):"
@@ -63,7 +65,6 @@ int main(int argc, char *argv[]) {
         qDebug() << "Connection established (update_orderbook_stats):"
                  << QObject::connect(backtester, &Backtester::update_orderbook_stats, gui, &BookGui::update_orderbook_stats, Qt::QueuedConnection);
 
-        // New connection for restart functionality
         qDebug() << "Connection established (restart_backtest):"
                  << QObject::connect(gui, &BookGui::restart_backtest, backtester, &Backtester::restart_backtest, Qt::QueuedConnection);
 

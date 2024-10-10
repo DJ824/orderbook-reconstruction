@@ -14,5 +14,5 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
-    void leaveEvent(QEvent *event) override; // Add this line
+    void leaveEvent(QEvent *event) override;
 };

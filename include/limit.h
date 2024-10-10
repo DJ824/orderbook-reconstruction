@@ -34,6 +34,11 @@ public:
     }
 
     inline void remove_order(Order* target) {
+        if (!target || !head_) {
+            // Log an error or throw an exception
+            return;
+        }
+
         volume_ -= target->size;
         --num_orders_;
 
@@ -66,6 +71,7 @@ public:
         target->prev_ = nullptr;
         target->parent_ = nullptr;
     }
+
     int32_t get_price();
     uint64_t get_volume();
     uint32_t get_size();

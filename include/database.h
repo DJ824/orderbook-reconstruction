@@ -13,6 +13,7 @@
 #include "lock_free_queue.h"
 #include <condition_variable>
 #include <mutex>
+#include "message.h"
 
 class DatabaseManager {
 private:
@@ -35,13 +36,23 @@ private:
     std::condition_variable cv;
     std::mutex mutex;
 
+    void log_error(const std::string& error_message);
+    void log_info(const std::string& info_message);
     bool connect_to_server();
     void process_database_queue();
     void process_orderbook_queue();
+    std::string send_query(const std::string& query);
+    std::vector<message> parse_csv_response(const std::string& response);
+
+
 
 public:
     DatabaseManager(std::string host, int port);
     ~DatabaseManager();
+    bool test_connection_and_query();
+
+    std::vector<message> read_csv_from_questdb();
+
 
     DatabaseManager(const DatabaseManager&) = delete;
     DatabaseManager& operator=(const DatabaseManager&) = delete;

@@ -15,10 +15,18 @@ Orderbook::~Orderbook() {
     for (auto& pair : bids_) {
         delete pair.second;
     }
+    bids_.clear();
+
     for (auto& pair : offers_) {
         delete pair.second;
     }
+    offers_.clear();
+
+    order_lookup_.clear();
+    limit_lookup_.clear();
+
 }
+
 
 template<bool Side>
 typename BookSide<Side>::MapType& Orderbook::get_book_side() {
@@ -245,11 +253,41 @@ void Orderbook::calculate_imbalance() {
 }
 
 void Orderbook::reset() {
+    for (auto &pair: bids_) {
+        delete pair.second;
+    }
     bids_.clear();
+
+    for (auto &pair: offers_) {
+        delete pair.second;
+    }
     offers_.clear();
+
     order_lookup_.clear();
     limit_lookup_.clear();
+
     order_pool_.reset();
+
+    bid_count_ = 0;
+    ask_count_ = 0;
+    update_possible = false;
+    vwap_ = 0.0;
+    sum1_ = 0.0;
+    sum2_ = 0.0;
+    skew_ = 0.0;
+    bid_depth_ = 0.0;
+    ask_depth_ = 0.0;
+    bid_vol_ = 0;
+    ask_vol_ = 0;
+    last_reset_time_ = "";
+    imbalance_ = 0.0;
+
+    current_message_time_ = std::chrono::system_clock::time_point();
+
+    bids_.get_allocator().allocate(1000);
+    offers_.get_allocator().allocate(1000);
+    order_lookup_.reserve(1000000);
+    limit_lookup_.reserve(2000);
 }
 
 int32_t Orderbook::get_best_bid_price() const { return bids_.begin()->first; }

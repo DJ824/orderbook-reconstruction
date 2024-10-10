@@ -5,6 +5,7 @@
 #include <QMessageBox>
 
 const int UPDATE_INTERVAL = 1000;
+
 BookGui::BookGui(QWidget *parent)
         : QWidget(parent),
           m_price_plot(new InteractivePlot(this)),
@@ -102,14 +103,25 @@ void BookGui::update_orderbook_stats(double vwap, double imbalance, const QStrin
 void BookGui::setup_plots() {
     m_bid_graph = m_price_plot->addGraph();
     m_ask_graph = m_price_plot->addGraph();
+    m_buy_trades_graph = m_price_plot->addGraph();
+    m_sell_trades_graph = m_price_plot->addGraph();
 
-    m_bid_graph->setPen(QPen(QColor(4, 165, 229), 2));
-    m_ask_graph->setPen(QPen(QColor(136, 57, 239), 2));
+    m_bid_graph->setPen(QPen(QColor(180, 190, 254), 1));
+    m_ask_graph->setPen(QPen(QColor(180, 190, 254), 1));
+    m_buy_trades_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, QColor(4, 165, 229), 7));
+    m_sell_trades_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, QColor(136, 57, 239), 7));
+
+    m_buy_trades_graph->setLineStyle(QCPGraph::lsNone);
+    m_sell_trades_graph->setLineStyle(QCPGraph::lsNone);
 
     m_price_plot->legend->setVisible(false);
 
+   // m_price_plot->setOpenGl(true);
+    //m_pnl_plot->setOpenGl(true);
+
     m_bid_graph->setAdaptiveSampling(true);
     m_ask_graph->setAdaptiveSampling(true);
+   // m_pnl_graph->setAdaptiveSampling(true);
 
     m_price_plot->setNotAntialiasedElements(QCP::aeAll);
 
@@ -120,7 +132,7 @@ void BookGui::setup_plots() {
     connect(m_price_plot, &InteractivePlot::userInteracted, this, &BookGui::on_user_interacted);
 
     m_pnl_graph = m_pnl_plot->addGraph();
-    m_pnl_graph->setPen(QPen(QColor(0, 255, 0), 2));
+    m_pnl_graph->setPen(QPen(QColor(180, 190, 254), 1));
 
     m_pnl_plot->legend->setVisible(false);
 
@@ -351,7 +363,19 @@ void BookGui::log_trade(const QString& timestamp, bool is_buy, int32_t price, in
     m_trade_log_table->setItem(row, 2, new QTableWidgetItem(QString::number(price)));
     m_trade_log_table->setItem(row, 3, new QTableWidgetItem(QString::number(size)));
     m_trade_log_table->scrollToBottom();
+
+    QDateTime dateTime = QDateTime::fromString(timestamp, "yyyy-MM-dd hh:mm:ss.zzz");
+    double timeInSeconds = dateTime.toMSecsSinceEpoch() / 1000.0;
+
+    if (is_buy) {
+        m_buy_trades_graph->addData(timeInSeconds, price);
+    } else {
+        m_sell_trades_graph->addData(timeInSeconds, price);
+    }
+
+    update_plots();
 }
+
 
 void BookGui::on_backtest_finished() {
     qDebug() << "Backtest finished";
@@ -361,14 +385,65 @@ void BookGui::on_backtest_finished() {
 }
 
 void BookGui::clear_data() {
+    m_price_plot->setUpdatesEnabled(false);
+    m_pnl_plot->setUpdatesEnabled(false);
+
     m_bid_graph->data()->clear();
     m_ask_graph->data()->clear();
     m_pnl_graph->data()->clear();
+    m_buy_trades_graph->data()->clear();
+    m_sell_trades_graph->data()->clear();
+
+    m_price_plot->xAxis->setRange(0, 1);
+    m_price_plot->yAxis->setRange(0, 1);
+    m_pnl_plot->xAxis->setRange(0, 1);
+    m_pnl_plot->yAxis->setRange(0, 1);
+
+    m_trade_log_table->clearContents();
     m_trade_log_table->setRowCount(0);
+
     clear_orderbook_stats();
+
     m_progress_bar->setValue(0);
-    update_plots();
+
+    m_auto_scroll = true;
+    m_user_scrolling = false;
+
+    m_horizontal_scroll_bar->setValue(0);
+    m_horizontal_scroll_bar->setRange(0, 0);
+
+    m_price_plot->clearPlottables();
+    m_pnl_plot->clearPlottables();
+
+    m_bid_graph = m_price_plot->addGraph();
+    m_ask_graph = m_price_plot->addGraph();
+    m_buy_trades_graph = m_price_plot->addGraph();
+    m_sell_trades_graph = m_price_plot->addGraph();
+    m_pnl_graph = m_pnl_plot->addGraph();
+
+    m_bid_graph->setPen(QPen(QColor(180, 190, 254), 1));
+    m_ask_graph->setPen(QPen(QColor(180, 190, 254), 1));
+    m_buy_trades_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, QColor(4, 165, 229), 7));
+    m_sell_trades_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, QColor(136, 57, 239), 7));
+    m_pnl_graph->setPen(QPen(QColor(180, 190, 254), 1));
+
+    m_buy_trades_graph->setLineStyle(QCPGraph::lsNone);
+    m_sell_trades_graph->setLineStyle(QCPGraph::lsNone);
+
+    m_price_plot->legend->setVisible(false);
+    m_pnl_plot->legend->setVisible(false);
+
+    m_price_plot->setUpdatesEnabled(true);
+    m_pnl_plot->setUpdatesEnabled(true);
+
+    m_price_plot->replot(QCustomPlot::rpQueuedReplot);
+    m_pnl_plot->replot(QCustomPlot::rpQueuedReplot);
+
+    QCoreApplication::removePostedEvents(this);
+
+    qDebug() << "All data cleared and GUI reset.";
 }
+
 
 void BookGui::on_backtest_error(const QString& error_message) {
     QMessageBox::critical(this, "Backtest Error", error_message);

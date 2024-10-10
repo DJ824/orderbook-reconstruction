@@ -2,11 +2,14 @@
 #include "backtester.h"
 #include <QDateTime>
 #include <QCoreApplication>
+#include <memory>
 
-Backtester::Backtester(Orderbook &book, DatabaseManager &db_manager,
+Backtester::Backtester(DatabaseManager &db_manager,
                        const std::vector<message> &messages, QObject *parent)
-        : QObject(nullptr), book_(book), db_manager_(db_manager), messages_(messages),
+        : QObject(nullptr), db_manager_(db_manager), messages_(messages),
           first_update_(false), current_message_index_(0), running_(false) {
+    book_ = std::make_shared<Orderbook>(db_manager);
+
 
     qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
              << "[Backtester] Backtester constructed on thread:" << QThread::currentThreadId();
@@ -32,7 +35,7 @@ void Backtester::restart_backtest() {
 void Backtester::reset_state() {
     current_message_index_ = 0;
     first_update_ = false;
-    book_.reset();
+    book_ = std::make_shared<Orderbook>(db_manager_);
     for (auto& strategy : strategies_) {
         strategy = std::make_unique<ImbalanceStrat>(db_manager_);
     }
@@ -79,16 +82,16 @@ void Backtester::stop_backtest() {
 }
 
 void Backtester::update_gui() {
-    int32_t bid = book_.get_best_bid_price();
-    int32_t ask = book_.get_best_ask_price();
-    std::string time_string = book_.get_formatted_time_fast();
+    int32_t bid = book_->get_best_bid_price();
+    int32_t ask = book_->get_best_ask_price();
+    std::string time_string = book_->get_formatted_time_fast();
     int32_t pnl = strategies_[0]->get_pnl();
 
     QDateTime date_time = QDateTime::fromString(QString::fromStdString(time_string), "yyyy-MM-dd HH:mm:ss.zzz");
     qint64 timestamp = date_time.toMSecsSinceEpoch();
 
     emit update_chart(timestamp, bid, ask, pnl);
-    emit update_orderbook_stats(book_.vwap_, book_.imbalance_, QString::fromStdString(time_string));
+    emit update_orderbook_stats(book_->vwap_, book_->imbalance_, QString::fromStdString(time_string));
 
 }
 
@@ -113,9 +116,9 @@ void Backtester::run_backtest() {
     while (running_ && current_message_index_ < messages_.size()) {
 
         const auto &msg = messages_[current_message_index_];
-        book_.process_msg(msg);
+        book_->process_msg(msg);
 
-        std::string curr_time = book_.get_formatted_time_fast();
+        std::string curr_time = book_->get_formatted_time_fast();
         //std::cout << curr_time << std::endl;
 
 
@@ -126,22 +129,22 @@ void Backtester::run_backtest() {
         }
 
         if (current_message_index_ < 14000 && !first_update_) {
-            book_.calculate_vols();
+            book_->calculate_vols();
             first_update_ = true;
         }
 
         if (current_message_index_ % 100 == 0) {
-            db_manager_.update_limit_orderbook(book_.bids_, book_.offers_);
-            book_.calculate_vols();
+            db_manager_.update_limit_orderbook(book_->bids_, book_->offers_);
+            book_->calculate_vols();
 
         }
 
         if (curr_time >= start_time_) {
-            book_.calculate_imbalance();
+            book_->calculate_imbalance();
             // run strat every 2 seconds in book time
             if (std::strcmp(curr_time.c_str() + 17, prev_time.c_str() + 17) >= 2) {
                 for (auto &strategy: strategies_) {
-                    strategy->on_book_update(book_);
+                    strategy->on_book_update(*book_);
 
                     while (!strategy->trade_queue_.empty()) {
                         auto [is_buy, price, size] = strategy->trade_queue_.front();

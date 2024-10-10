@@ -25,7 +25,7 @@ AsyncLogger::AsyncLogger(const std::string &log_file, DatabaseManager &db_manage
     write_to_buffer(header);
     std::cout << header;
 
-    console_thread_ = std::thread(&AsyncLogger::console_loop, this);
+    //console_thread_ = std::thread(&AsyncLogger::console_loop, this);
     csv_thread_ = std::thread(&AsyncLogger::csv_loop, this);
     db_thread_ = std::thread(&AsyncLogger::db_loop, this);
 }
@@ -138,7 +138,7 @@ std::string AsyncLogger::format_log_entry(const log_entry &entry) {
 
 void AsyncLogger::log(const std::string &timestamp, int32_t bid, int32_t ask, int position, int trade_count, float pnl) {
     log_entry entry{timestamp, bid, ask, position, trade_count, pnl};
-    console_queue_.enqueue(entry);
+   // console_queue_.enqueue(entry);
     csv_queue_.enqueue(entry);
     db_queue_.enqueue(entry);
 }
