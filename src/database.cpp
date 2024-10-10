@@ -195,7 +195,6 @@ std::vector<message> DatabaseManager::parse_csv_response(const std::string& resp
     std::istringstream response_stream(response);
     std::string line;
 
-    // Skip the header line
     std::getline(response_stream, line);
 
     while (std::getline(response_stream, line)) {
@@ -219,7 +218,6 @@ std::vector<message> DatabaseManager::parse_csv_response(const std::string& resp
                 messages.emplace_back(order_id, ts_event, size, price, action, side);
             } catch (const std::exception& e) {
                 log_error("Error parsing CSV line: " + line + " - " + e.what());
-                // You might want to skip this line and continue, or handle the error differently
             }
         } else {
             log_error("Invalid number of fields in CSV line: " + line);
@@ -231,7 +229,7 @@ std::vector<message> DatabaseManager::parse_csv_response(const std::string& resp
 
 std::vector<message> DatabaseManager::read_csv_from_questdb() {
     std::vector<message> all_messages;
-    const size_t page_size = 1000000;  // Adjust based on your needs and memory constraints
+    const size_t page_size = 1000000;
     size_t offset = 0;
 
     try {
@@ -242,7 +240,7 @@ std::vector<message> DatabaseManager::read_csv_from_questdb() {
             std::vector<message> page_messages = parse_csv_response(response);
 
             if (page_messages.empty()) {
-                break;  // No more data to fetch
+                break;
             }
 
             all_messages.insert(all_messages.end(), page_messages.begin(), page_messages.end());
@@ -273,10 +271,8 @@ bool DatabaseManager::test_connection_and_query() {
 
 void DatabaseManager::log_error(const std::string& error_message) {
     std::cerr << "DatabaseManager Error: " << error_message << std::endl;
-    // You can add more sophisticated logging here if needed
 }
 
 void DatabaseManager::log_info(const std::string& info_message) {
     std::cout << "DatabaseManager Info: " << info_message << std::endl;
-    // You can add more sophisticated logging here if needed
-}
+git}

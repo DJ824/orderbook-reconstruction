@@ -21,9 +21,6 @@ int main(int argc, char *argv[]) {
                  << "[Main] Initializing backtester...";
 
         DatabaseManager db_manager("127.0.0.1", 9009);
-
-
-
         Orderbook book(db_manager);
 
         auto parsing_start = std::chrono::high_resolution_clock::now();
