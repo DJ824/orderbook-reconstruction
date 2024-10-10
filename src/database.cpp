@@ -210,7 +210,7 @@ std::vector<message> DatabaseManager::parse_csv_response(const std::string& resp
             try {
                 uint64_t ts_event = std::stoull(fields[0]);
                 char action = fields[1][0];
-                bool side = (fields[2][0] == 'B');  // 'B' for buy, assume 'S' for sell
+                bool side = (fields[2][0] == 'B');  
                 int32_t price = std::stoi(fields[3]);
                 uint32_t size = std::stoul(fields[4]);
                 uint64_t order_id = std::stoull(fields[5]);
