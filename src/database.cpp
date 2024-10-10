@@ -169,12 +169,10 @@ std::string DatabaseManager::send_query(const std::string& query) {
         throw std::runtime_error("Failed to connect to QuestDB");
     }
 
-    // Send the query
     if (send(sock_, query.c_str(), query.length(), 0) < 0) {
         throw std::runtime_error("Failed to send query to QuestDB");
     }
 
-    // Receive the response
     std::string response;
     char buffer[4096];
     ssize_t bytes_received;
