@@ -111,40 +111,67 @@ public:
     int32_t voi_;
 
     inline void calculate_voi() {
+        int32_t bid_delta = get_best_bid_price() - prev_best_bid_;
+        int32_t ask_delta = get_best_ask_price() - prev_best_ask_;
 
-        int32_t dBidPrice = get_best_bid_price() - prev_best_bid_;
-        int32_t dAskPrice = get_best_ask_price() - prev_best_ask_;
+        int32_t bid_cv = 0;
+        int32_t ask_cv = 0;
 
-        int32_t bidCV = (get_best_bid_volume() - ((dBidPrice == 0) ? prev_best_bid_volume_ : 0)) * (dBidPrice >= 0 ? 1 : 0);
-        int32_t askCV = (get_best_ask_volume() - ((dAskPrice == 0) ? prev_best_ask_volume_ : 0)) * (dAskPrice <= 0 ? 1 : 0);
+        if (bid_delta >= 0) {
+            if (bid_delta == 0) {
+                bid_cv = get_best_bid_volume() - prev_best_bid_volume_;
+            } else {
+                bid_cv = get_best_bid_volume();
+            }
+        }
 
-        voi_ = bidCV - askCV;
-        //std::cout << voi_ << std::endl;
+        if (ask_delta <= 0) {
+            if (ask_delta == 0) {
+                ask_cv = get_best_ask_volume() - prev_best_ask_volume_;
+            } else {
+                ask_cv = get_best_ask_volume();
+            }
+        }
+
+        voi_ = bid_cv - ask_cv;
         voi_history_.push_back(voi_);
 
         prev_best_bid_ = get_best_bid_price();
         prev_best_ask_ = get_best_ask_price();
         prev_best_bid_volume_ = get_best_bid_volume();
         prev_best_ask_volume_ = get_best_ask_volume();
-
     }
 
     inline void calculate_voi_curr() {
+        int32_t bid_delta = get_best_bid_price() - prev_best_bid_;
+        int32_t ask_delta = get_best_ask_price() - prev_best_ask_;
 
-        int32_t dBidPrice = get_best_bid_price() - prev_best_bid_;
-        int32_t dAskPrice = get_best_ask_price() - prev_best_ask_;
+        int32_t bid_cv = 0;
+        int32_t ask_cv = 0;
 
-        int32_t bidCV = (get_best_bid_volume() - ((dBidPrice == 0) ? prev_best_bid_volume_ : 0)) * (dBidPrice >= 0 ? 1 : 0);
-        int32_t askCV = (get_best_ask_volume() - ((dAskPrice == 0) ? prev_best_ask_volume_ : 0)) * (dAskPrice <= 0 ? 1 : 0);
+        if (bid_delta >= 0) {
+            if (bid_delta == 0) {
+                bid_cv = get_best_bid_volume() - prev_best_bid_volume_;
+            } else {
+                bid_cv = get_best_bid_volume();
+            }
+        }
 
-        voi_ = bidCV - askCV;
+        if (ask_delta <= 0) {
+            if (ask_delta == 0) {
+                ask_cv = get_best_ask_volume() - prev_best_ask_volume_;
+            } else {
+                ask_cv = get_best_ask_volume();
+            }
+        }
+
+        voi_ = bid_cv - ask_cv;
         voi_history_curr_.push_back(voi_);
 
         prev_best_bid_ = get_best_bid_price();
         prev_best_ask_ = get_best_ask_price();
         prev_best_bid_volume_ = get_best_bid_volume();
         prev_best_ask_volume_ = get_best_ask_volume();
-
     }
 
     inline int32_t get_best_bid_volume() {
