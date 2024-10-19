@@ -3,19 +3,21 @@
 #include <QDateTime>
 #include <QCoreApplication>
 #include <memory>
+#include <iomanip>
 
 Backtester::Backtester(DatabaseManager &db_manager,
-                       const std::vector<message> &messages, QObject *parent)
-        : QObject(nullptr), db_manager_(db_manager), messages_(messages),
+                       const std::vector<message> &messages, const std::vector<message> &train_messages, QObject *parent)
+        : QObject(nullptr), db_manager_(db_manager), messages_(messages), train_messages_(train_messages),
           first_update_(false), current_message_index_(0), running_(false) {
-    book_ = std::make_shared<Orderbook>(db_manager);
-
 
     qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
              << "[Backtester] Backtester constructed on thread:" << QThread::currentThreadId();
 
     backtest_timer_ = new QTimer(this);
     connect(backtest_timer_, &QTimer::timeout, this, &Backtester::run_backtest);
+    book_ = std::make_unique<Orderbook>(db_manager);
+    train_book_ = std::make_unique<Orderbook>(db_manager);
+    strategies_.push_back(std::make_unique<LinearModelStrategy>(db_manager_, book_.get()));
 }
 
 Backtester::~Backtester() {
@@ -23,6 +25,55 @@ Backtester::~Backtester() {
         worker_thread_.quit();
         worker_thread_.wait();
     }
+}
+
+void Backtester::train_model() {
+    std::cout << "fitting model..." << std::endl;
+
+    train_message_index_ = 0;
+    int64_t prev_seconds = 0;
+    int ct = 0;
+
+    auto parse_time = [](const std::string& time_str) {
+        int hour = (time_str[11] - '0') * 10 + (time_str[12] - '0');
+        int minute = (time_str[14] - '0') * 10 + (time_str[15] - '0');
+        int second = (time_str[17] - '0') * 10 + (time_str[18] - '0');
+        return hour * 3600 + minute * 60 + second;
+    };
+
+    while (train_message_index_ < train_messages_.size()) {
+        const auto& msg = train_messages_[train_message_index_];
+        train_book_->process_msg(msg);
+
+        std::string curr_time = train_book_->get_formatted_time_fast();
+        int64_t curr_seconds = parse_time(curr_time);
+
+        if (curr_time >= train_start_time_) {
+            if (prev_seconds == 0) {
+                prev_seconds = curr_seconds;
+            }
+
+            if (curr_seconds - prev_seconds >= 1) {
+                train_book_->calculate_voi();
+                train_book_->add_mid_price();
+                prev_seconds = curr_seconds;
+            }
+        }
+
+        ++train_message_index_;
+
+        if (curr_time >= train_end_time_) {
+            break;
+        }
+    }
+
+    book_->voi_history_ = std::move(train_book_->voi_history_);
+    book_->mid_prices_ = std::move(train_book_->mid_prices_);
+
+    auto* linear_strategy = dynamic_cast<LinearModelStrategy*>(strategies_[0].get());
+    linear_strategy->fit_model();
+
+    std::cout << "model fitted, processed " << train_message_index_ << " messages." << std::endl;
 }
 
 void Backtester::restart_backtest() {
@@ -37,15 +88,10 @@ void Backtester::reset_state() {
     first_update_ = false;
     book_ = std::make_shared<Orderbook>(db_manager_);
     for (auto& strategy : strategies_) {
-        strategy = std::make_unique<ImbalanceStrat>(db_manager_);
+        strategy = std::make_unique<ImbalanceStrat>(db_manager_, book_.get());
     }
 }
 
-
-
-void Backtester::add_strategy(std::unique_ptr<Strategy> strategy) {
-    strategies_.push_back(std::move(strategy));
-}
 
 void Backtester::handleStartSignal() {
     start_backtest();
@@ -102,6 +148,9 @@ void Backtester::run_backtest() {
         log(QString("Resuming backtest from message index: %1").arg(current_message_index_));
     }
 
+    train_model();
+
+
     running_ = true;
     first_update_ = false;
 
@@ -111,21 +160,26 @@ void Backtester::run_backtest() {
     QElapsedTimer update_timer;
     update_timer.start();
 
-    std::string prev_time;
+    auto parse_time = [](const std::string& time_str) {
+        int hour = (time_str[11] - '0') * 10 + (time_str[12] - '0');
+        int minute = (time_str[14] - '0') * 10 + (time_str[15] - '0');
+        int second = (time_str[17] - '0') * 10 + (time_str[18] - '0');
+        return hour * 3600 + minute * 60 + second;
+    };
+
+    int64_t prev_seconds = 0;
 
     while (running_ && current_message_index_ < messages_.size()) {
-
         const auto &msg = messages_[current_message_index_];
         book_->process_msg(msg);
 
         std::string curr_time = book_->get_formatted_time_fast();
-        //std::cout << curr_time << std::endl;
+        int64_t curr_seconds = parse_time(curr_time);
 
-
-        if (curr_time >= start_time_ && update_timer.elapsed() >= 20) {
+        if (curr_time >= start_time_ && update_timer.elapsed() >= 15) {
             update_gui();
             update_timer.restart();
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 15);
         }
 
         if (current_message_index_ < 14000 && !first_update_) {
@@ -133,25 +187,32 @@ void Backtester::run_backtest() {
             first_update_ = true;
         }
 
-        if (current_message_index_ % 100 == 0) {
+        if (current_message_index_ % 100 == 0 && current_message_index_ > 2000) {
             db_manager_.update_limit_orderbook(book_->bids_, book_->offers_);
-            book_->calculate_vols();
+            //book_->calculate_vols();
 
         }
 
         if (curr_time >= start_time_) {
-            book_->calculate_imbalance();
-            // run strat every 2 seconds in book time
-            if (std::strcmp(curr_time.c_str() + 17, prev_time.c_str() + 17) >= 2) {
+            if (prev_seconds == 0) {
+                prev_seconds = curr_seconds;
+            }
+
+            if (curr_seconds - prev_seconds >= 1) {
+
                 for (auto &strategy: strategies_) {
-                    strategy->on_book_update(*book_);
+                   // book_->calculate_vols();
+                    //book_->calculate_imbalance();
+                    strategy->on_book_update();
 
                     while (!strategy->trade_queue_.empty()) {
-                        auto [is_buy, price, size] = strategy->trade_queue_.front();
+                        auto [is_buy, price] = strategy->trade_queue_.front();
                         strategy->trade_queue_.pop();
-                        emit trade_executed(QString::fromStdString(curr_time), is_buy, price, size);
+                        emit trade_executed(QString::fromStdString(curr_time), is_buy, price);
                     }
                 }
+
+                prev_seconds = curr_seconds;
             }
         }
 
@@ -170,7 +231,6 @@ void Backtester::run_backtest() {
         }
 
         ++current_message_index_;
-        prev_time = curr_time;
     }
 
     log(QString("run_backtest finished. Processed %1 messages in %2 seconds")

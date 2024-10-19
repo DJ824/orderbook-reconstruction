@@ -90,10 +90,10 @@ void BookGui::clear_orderbook_stats() {
 
 void BookGui::update_orderbook_stats(double vwap, double imbalance, const QString& current_time) {
     if (auto item = m_orderbook_stats_table->item(0, 1)) {
-        item->setText(QString::number(vwap, 'f', 2));
+        //item->setText(QString::number(vwap, 'f', 2));
     }
     if (auto item = m_orderbook_stats_table->item(1, 1)) {
-        item->setText(QString::number(imbalance, 'f', 4));
+        //item->setText(QString::number(imbalance, 'f', 4));
     }
     if (auto item = m_orderbook_stats_table->item(2, 1)) {
         item->setText(current_time);
@@ -355,13 +355,12 @@ void BookGui::update_progress(int progress) {
     m_progress_bar->setValue(progress);
 }
 
-void BookGui::log_trade(const QString& timestamp, bool is_buy, int32_t price, int size) {
+void BookGui::log_trade(const QString& timestamp, bool is_buy, int32_t price) {
     int row = m_trade_log_table->rowCount();
     m_trade_log_table->insertRow(row);
     m_trade_log_table->setItem(row, 0, new QTableWidgetItem(timestamp));
     m_trade_log_table->setItem(row, 1, new QTableWidgetItem(is_buy ? "Buy" : "Sell"));
     m_trade_log_table->setItem(row, 2, new QTableWidgetItem(QString::number(price)));
-    m_trade_log_table->setItem(row, 3, new QTableWidgetItem(QString::number(size)));
     m_trade_log_table->scrollToBottom();
 
     QDateTime dateTime = QDateTime::fromString(timestamp, "yyyy-MM-dd hh:mm:ss.zzz");

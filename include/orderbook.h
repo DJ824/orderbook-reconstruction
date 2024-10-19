@@ -53,8 +53,16 @@ private:
     template<bool Side>
     void update_modify_vol(int32_t og_price, int32_t new_prive, int32_t og_size, int32_t new_size);
 
+    static constexpr size_t BUFFER_SIZE = 40000;
+    size_t write_index_ = 0;
+    size_t size_ = 0;
+
 
 public:
+    int64_t ct_ = 0;
+    std::vector<int32_t> mid_prices_;
+    std::vector<int32_t> mid_prices_curr_;
+
     bool update_possible = false;
     BookSide<true>::MapType bids_;
     BookSide<false>::MapType offers_;
@@ -74,11 +82,90 @@ public:
 
     void calculate_skew();
 
+    void add_mid_price() {
+        mid_prices_.push_back(get_mid_price());
+    }
+
+    void add_mid_price_curr() {
+        mid_prices_curr_.push_back(get_mid_price());
+    }
+
+    int32_t get_indexed_mid_price(size_t index) {
+        size_t read_index = (write_index_ - 1 - index + BUFFER_SIZE) % BUFFER_SIZE;
+        return mid_prices_[read_index];
+    }
+
+    int32_t get_indexed_voi(size_t index) {
+        return voi_history_[index];
+    }
+
+
     void calculate_imbalance();
+
+    int32_t bid_delta_;
+    int32_t ask_delta_;
+    int32_t prev_best_bid_;
+    int32_t prev_best_ask_;
+    int32_t prev_best_bid_volume_;
+    int32_t prev_best_ask_volume_;
+    int32_t voi_;
+
+    inline void calculate_voi() {
+
+        int32_t dBidPrice = get_best_bid_price() - prev_best_bid_;
+        int32_t dAskPrice = get_best_ask_price() - prev_best_ask_;
+
+        int32_t bidCV = (get_best_bid_volume() - ((dBidPrice == 0) ? prev_best_bid_volume_ : 0)) * (dBidPrice >= 0 ? 1 : 0);
+        int32_t askCV = (get_best_ask_volume() - ((dAskPrice == 0) ? prev_best_ask_volume_ : 0)) * (dAskPrice <= 0 ? 1 : 0);
+
+        voi_ = bidCV - askCV;
+        //std::cout << voi_ << std::endl;
+        voi_history_.push_back(voi_);
+
+        prev_best_bid_ = get_best_bid_price();
+        prev_best_ask_ = get_best_ask_price();
+        prev_best_bid_volume_ = get_best_bid_volume();
+        prev_best_ask_volume_ = get_best_ask_volume();
+
+    }
+
+    inline void calculate_voi_curr() {
+
+        int32_t dBidPrice = get_best_bid_price() - prev_best_bid_;
+        int32_t dAskPrice = get_best_ask_price() - prev_best_ask_;
+
+        int32_t bidCV = (get_best_bid_volume() - ((dBidPrice == 0) ? prev_best_bid_volume_ : 0)) * (dBidPrice >= 0 ? 1 : 0);
+        int32_t askCV = (get_best_ask_volume() - ((dAskPrice == 0) ? prev_best_ask_volume_ : 0)) * (dAskPrice <= 0 ? 1 : 0);
+
+        voi_ = bidCV - askCV;
+        voi_history_curr_.push_back(voi_);
+
+        prev_best_bid_ = get_best_bid_price();
+        prev_best_ask_ = get_best_ask_price();
+        prev_best_bid_volume_ = get_best_bid_volume();
+        prev_best_ask_volume_ = get_best_ask_volume();
+
+    }
+
+    inline int32_t get_best_bid_volume() {
+        return bids_.begin()->second->volume_;
+    }
+
+    inline int32_t get_best_ask_volume() {
+        return offers_.begin()->second->volume_;
+    }
 
     uint64_t get_bid_depth() const;
 
     uint64_t get_ask_depth() const;
+
+    int32_t get_best_bid_price() const;
+
+    int32_t get_best_ask_price() const;
+
+    uint64_t get_count() const;
+
+    std::string get_formatted_time_fast() const;
 
     template<bool Side>
     void add_limit_order(uint64_t id, int32_t price, uint32_t size, uint64_t unix_time);
@@ -95,14 +182,8 @@ public:
     template<bool Side>
     int32_t &get_volume();
 
-    int32_t get_best_bid_price() const;
-
-    int32_t get_best_ask_price() const;
-
-    uint64_t get_count() const;
-
-
     inline void process_msg(const message &msg) {
+        ++ct_;
         auto nanoseconds = std::chrono::nanoseconds(msg.time_);
         auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(nanoseconds);
         current_message_time_ = std::chrono::system_clock::time_point(microseconds);
@@ -140,7 +221,7 @@ public:
         auto ask_it = offers_.begin();
         auto ask_end = offers_.end();
 
-        for (int i = 0; i < 80 && (bid_it != bid_end || ask_it != ask_end); i += 4) {
+        for (int i = 0; i < 100 && (bid_it != bid_end || ask_it != ask_end); i += 4) {
             uint32_t bid_chunk[4] = {0, 0, 0, 0};
             uint32_t ask_chunk[4] = {0, 0, 0, 0};
 
@@ -170,9 +251,8 @@ public:
         vwap_ = sum1_ / sum2_;
     }
 
-    std::string get_formatted_time_fast() const;
-
-    std::string get_formatted_time() const;
+    std::vector<int32_t> voi_history_;
+    std::vector<int32_t> voi_history_curr_;
 };
 
 

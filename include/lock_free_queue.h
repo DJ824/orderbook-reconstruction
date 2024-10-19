@@ -64,7 +64,7 @@ public:
         }
 
         // use placement new to construct a new T object at the location of curr_tail.storage
-        // std::forward preserves the value category of the arg (lval/rval)
+        // std::forward preserves the value of the arg (lval/rval)
         new (buffer_[curr_tail].storage) T(std::forward<U>(item));
         buffer_[curr_tail].written.store(true);
         tail_.store(next_tail);

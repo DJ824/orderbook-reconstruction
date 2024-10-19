@@ -9,6 +9,8 @@ Orderbook::Orderbook(DatabaseManager& db_manager)
     offers_.get_allocator().allocate(1000);
     order_lookup_.reserve(1000000);
     limit_lookup_.reserve(2000);
+    ct_ = 0;
+    voi_history_.reserve(40000);
 }
 
 Orderbook::~Orderbook() {
@@ -72,16 +74,12 @@ void Orderbook::add_limit_order(uint64_t id, int32_t price, uint32_t size, uint6
         ++ask_count_;
     }
 
-    update_vol<Side>(price, size, true);
+    //update_vol<Side>(price, size, true);
 }
 
 
 template<bool Side>
 void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size) {
-    if (id == 6413326828552) {
-        std::cout << order_lookup_[id]->id_ << std::endl;
-        std::cout << order_lookup_[id]->size;
-    }
     auto target = order_lookup_[id];
     auto curr_limit = target->parent_;
     order_lookup_.erase(id);
@@ -99,7 +97,7 @@ void Orderbook::remove_order(uint64_t id, int32_t price, uint32_t size) {
         --ask_count_;
     }
 
-    update_vol<Side>(price, size, false);
+    //update_vol<Side>(price, size, false);
     order_pool_.return_order(target);
 }
 
@@ -138,7 +136,7 @@ void Orderbook::modify_order(uint64_t id, int32_t new_price, uint32_t new_size, 
         target->unix_time_ = unix_time;
     }
 
-    update_modify_vol<Side>(prev_price, new_price, prev_size, new_size);
+    //update_modify_vol<Side>(prev_price, new_price, prev_size, new_size);
 }
 
 template<bool Side>

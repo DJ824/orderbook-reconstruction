@@ -8,7 +8,7 @@
 #include "database.h"
 #include "orderbook.h"
 #include "book_gui.h"
-#include "strategies/imbalance_strat.cpp"
+#include "strategies/linear_model_strat.cpp"
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -21,13 +21,13 @@ int main(int argc, char *argv[]) {
                  << "[Main] Initializing backtester...";
 
         DatabaseManager db_manager("127.0.0.1", 9009);
-        Orderbook book(db_manager);
-
         auto parsing_start = std::chrono::high_resolution_clock::now();
         auto parser = std::make_unique<Parser>("es0604.csv");
+        auto train_parser = std::make_unique<Parser>("es0603.csv");
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Main] Parsing messages...";
         parser->parse();
+        train_parser->parse();
         auto parsing_end = std::chrono::high_resolution_clock::now();
         auto parsing_duration = std::chrono::duration_cast<std::chrono::duration<double>>(parsing_end - parsing_start);
 
@@ -40,11 +40,10 @@ int main(int argc, char *argv[]) {
         BookGui *gui = new BookGui();
         gui->show();
 
-        Backtester *backtester = new Backtester(db_manager, parser->message_stream_);
+        Backtester *backtester = new Backtester(db_manager, parser->message_stream_, train_parser->message_stream_);
+
         qDebug() << QTime::currentTime().toString("hh:mm:ss.zzz")
                  << "[Main] Backtester created on thread:" << QThread::currentThreadId();
-        backtester->add_strategy(std::make_unique<ImbalanceStrat>(db_manager));
-
         qDebug() << "Connection established (start_backtest):"
                  << QObject::connect(gui, &BookGui::start_backtest, backtester, &Backtester::handleStartSignal, Qt::QueuedConnection);
         qDebug() << "Connection established (stop_backtest):"

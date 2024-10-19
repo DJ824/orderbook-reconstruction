@@ -9,6 +9,7 @@
 #include "orderbook.h"
 #include "database.h"
 #include "message.h"
+#include "../src/strategies/linear_model_strat.cpp"
 #include "../src/strategies/imbalance_strat.cpp"
 #include <vector>
 #include <memory>
@@ -19,10 +20,12 @@ Q_OBJECT
 
 public:
     explicit Backtester(DatabaseManager& db_manager,
-                        const std::vector<message>& messages, QObject* parent = nullptr);
+                        const std::vector<message>& messages, const std::vector<message>& train_messages, QObject* parent = nullptr);
     ~Backtester() override;
 
     void add_strategy(std::unique_ptr<Strategy> strategy);
+
+    void train_model();
 
 public slots:
     void start_backtest();
@@ -37,7 +40,7 @@ signals:
     void backtest_started();
     void backtest_finished();
     void update_progress(int progress);
-    void trade_executed(const QString& timestamp, bool is_buy, int32_t price, int size);
+    void trade_executed(const QString& timestamp, bool is_buy, int32_t price);
     void update_chart(qint64 timestamp, double bestBid, double bestAsk, int32_t pnl);
     void backtest_error(const QString& error_message);
     void update_orderbook_stats(double vwap, double imbalance, const QString& current_time);
@@ -45,6 +48,8 @@ signals:
 private:
     QTimer *backtest_timer_;
     std::shared_ptr<Orderbook> book_;
+    std::unique_ptr<Orderbook> train_book_;
+    size_t train_message_index_;
 
     std::vector<std::unique_ptr<Strategy>> strategies_;
     DatabaseManager& db_manager_;
@@ -53,8 +58,11 @@ private:
     const int UPDATE_INTERVAL = 1000;
     std::atomic<bool> running_;
     std::vector<message> messages_;
+    std::vector<message> train_messages_;
     const std::string start_time_ = "2024-06-04 09:30:00.000";
     const std::string end_time_ = "2024-06-04 16:00:00.000";
+    const std::string train_start_time_ = "2024-06-03 09:30:00.000";
+    const std::string train_end_time_ = "2024-06-03 16:00:00.000";
     QThread worker_thread_;
 
     void update_gui();

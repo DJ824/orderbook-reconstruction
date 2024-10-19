@@ -22,7 +22,7 @@ public:
 public slots:
     void add_data_point(qint64 timestamp, double bestBid, double bestAsk, double pnl);
     void update_progress(int progress);
-    void log_trade(const QString& timestamp, bool is_buy, int32_t price, int size);
+    void log_trade(const QString& timestamp, bool is_buy, int32_t price);
     void on_backtest_finished();
     void on_backtest_error(const QString& error_message);
     void update_orderbook_stats(double vwap, double imbalance, const QString& current_time);
@@ -38,8 +38,8 @@ private:
     QCPGraph *m_bid_graph;
     QCPGraph *m_ask_graph;
     QCPGraph *m_pnl_graph;
-    QCPGraph *m_buy_trades_graph;  // New graph for buy trades
-    QCPGraph *m_sell_trades_graph; // New graph for sell trades
+    QCPGraph *m_buy_trades_graph;
+    QCPGraph *m_sell_trades_graph;
 
     QTimer *m_update_timer;
     QScrollBar *m_horizontal_scroll_bar;
@@ -55,7 +55,7 @@ private:
     bool m_auto_scroll;
     bool m_user_scrolling;
 
-    static constexpr int UPDATE_INTERVAL = 1000;
+    static constexpr int UPDATE_INTERVAL = 500;
 
     void setup_plots();
     void setup_scroll_bar();
