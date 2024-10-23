@@ -111,4 +111,4 @@ public:
     }
 };
 
-#endif // LOCK_FREE_QUEUE_H
+#endif 
