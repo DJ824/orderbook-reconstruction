@@ -66,8 +66,10 @@ void Backtester::train_model() {
             break;
         }
     }
+    std::cout << train_book_->voi_history_.size() << std::endl;
 
     book_->voi_history_ = std::move(train_book_->voi_history_);
+    std::cout << book_->voi_history_.size() << std::endl;
     book_->mid_prices_ = std::move(train_book_->mid_prices_);
 
     auto* linear_strategy = dynamic_cast<LinearModelStrategy*>(strategies_[0].get());
@@ -168,8 +170,11 @@ void Backtester::run_backtest() {
     };
 
     int64_t prev_seconds = 0;
+    int64_t prev_trade = 0;
+    std::cout << messages_.size() << std::endl;
 
     while (running_ && current_message_index_ < messages_.size()) {
+
         const auto &msg = messages_[current_message_index_];
         book_->process_msg(msg);
 
@@ -183,8 +188,8 @@ void Backtester::run_backtest() {
         }
 
         if (current_message_index_ < 14000 && !first_update_) {
-            book_->calculate_vols();
-            first_update_ = true;
+            //book_->calculate_vols();
+            //first_update_ = true;
         }
 
         if (current_message_index_ % 100 == 0 && current_message_index_ > 2000) {
@@ -203,12 +208,29 @@ void Backtester::run_backtest() {
                 for (auto &strategy: strategies_) {
                    // book_->calculate_vols();
                     //book_->calculate_imbalance();
+
+                    /*
+                    if (curr_seconds - prev_trade >= 300 && strategy->get_position() != 0) {
+                        if (strategy->get_position() > 0) {
+                            strategy->execute_trade(false, book_->get_best_ask_price(), 1);
+                            strategy->trade_queue_.pop();
+                            emit trade_executed(QString::fromStdString(curr_time), false, book_->get_best_ask_price());
+                        } else if (strategy->get_position() < 0) {
+                            strategy->execute_trade(true, book_->get_best_ask_price(), 1);
+                            strategy->trade_queue_.pop();
+                            emit trade_executed(QString::fromStdString(curr_time), true, book_->get_best_bid_price());
+
+                        }
+                    }
+                    */
+
                     strategy->on_book_update();
 
                     while (!strategy->trade_queue_.empty()) {
                         auto [is_buy, price] = strategy->trade_queue_.front();
                         strategy->trade_queue_.pop();
                         emit trade_executed(QString::fromStdString(curr_time), is_buy, price);
+                        prev_trade = curr_seconds;
                     }
                 }
 
@@ -221,10 +243,12 @@ void Backtester::run_backtest() {
             emit update_progress(progress);
         }
 
+        /*
         if (curr_time >= end_time_) {
             log("Reached end time, stopping backtest");
             break;
         }
+        */
 
         if (current_message_index_ == messages_.size() - 1) {
             break;

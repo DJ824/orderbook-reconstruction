@@ -16,8 +16,8 @@
 class LinearModelStrategy : public Strategy {
 protected:
     static constexpr int MAX_LAG_ = 5;
-    static constexpr int FORECAST_WINDOW_ = 20;
-    static constexpr double THRESHOLD_ = 15;
+    static constexpr int FORECAST_WINDOW_ = 300;
+    static constexpr double THRESHOLD_ = 20;
     static constexpr int TRADE_SIZE_ = 1;
 
     std::vector<double> model_coefficients_;
@@ -47,18 +47,6 @@ protected:
         return prediction;
     }
 
-    void execute_trade(bool is_buy, int32_t price) {
-        if (is_buy) {
-            position_ += TRADE_SIZE_;
-            buy_qty_ += TRADE_SIZE_;
-            real_total_buy_px_ += price * TRADE_SIZE_;
-        } else {
-            position_ -= TRADE_SIZE_;
-            sell_qty_ += TRADE_SIZE_;
-            real_total_sell_px_ += price * TRADE_SIZE_;
-        }
-        fees_ += FEES_PER_SIDE_;
-    }
 
     void update_theo_values() override {
         int32_t bid_price = book_->get_best_bid_price();
@@ -101,6 +89,22 @@ public:
         model_coefficients_.resize(MAX_LAG_ + 2, 0.0);
     }
 
+    void execute_trade(bool is_buy, int32_t price, int32_t trade_size) override {
+        if (is_buy) {
+            trade_queue_.emplace(true, price);
+            position_ += TRADE_SIZE_;
+            buy_qty_ += TRADE_SIZE_;
+            real_total_buy_px_ += price * TRADE_SIZE_;
+        } else {
+            trade_queue_.emplace(false, price);
+            position_ -= TRADE_SIZE_;
+            sell_qty_ += TRADE_SIZE_;
+            real_total_sell_px_ += price * TRADE_SIZE_;
+        }
+        fees_ += FEES_PER_SIDE_;
+    }
+
+
     void on_book_update() override {
 
         book_->calculate_voi_curr();
@@ -114,13 +118,11 @@ public:
         if (predicted_change >= THRESHOLD_ && position_ < max_pos_) {
             std::cout << predicted_change << std::endl;
             std::cout << book_->get_formatted_time_fast() << std::endl;
-            execute_trade(true, ask_price);
-            trade_queue_.emplace(true, ask_price);
+            execute_trade(true, ask_price, 1);
         } else if (predicted_change <= -THRESHOLD_ && position_ > -max_pos_) {
             std::cout << predicted_change << std::endl;
             std::cout << book_->get_formatted_time_fast() << std::endl;
-            execute_trade(false, bid_price);
-            trade_queue_.emplace(false, bid_price);
+            execute_trade(false, bid_price, 1);
         }
 
         update_theo_values();
@@ -139,6 +141,7 @@ public:
     }
 
     void fit_model() override {
+        std::cout << book_->voi_history_.size() << std::endl;
         int n = static_cast<int>(book_->voi_history_.size()) - forecast_window_ - MAX_LAG_;
 
         Eigen::MatrixXd X(n, MAX_LAG_ + 2);

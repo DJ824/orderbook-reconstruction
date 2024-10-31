@@ -16,18 +16,7 @@ protected:
 
     }
 
-    void execute_trade(bool is_buy, int32_t price, int size) {
-        if (is_buy) {
-            position_ += size;
-            buy_qty_ += size;
-            real_total_buy_px_ += price * size;
-        } else {
-            position_ -= size;
-            sell_qty_ += size;
-            real_total_sell_px_ += price * size;
-        }
-        fees_ += FEES_PER_SIDE_;
-    }
+
 
 
     void update_theo_values() override {
@@ -78,9 +67,22 @@ public:
 
         update_theo_values();
         calculate_pnl();
-
-
     }
+
+    void execute_trade(bool is_buy, int32_t price, int size) override {
+        if (is_buy) {
+            position_ += size;
+            buy_qty_ += size;
+            real_total_buy_px_ += price * size;
+        } else {
+            position_ -= size;
+            sell_qty_ += size;
+            real_total_sell_px_ += price * size;
+        }
+        fees_ += FEES_PER_SIDE_;
+    }
+
+
 
     void reset() override {
         Strategy::reset();
