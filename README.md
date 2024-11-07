@@ -123,13 +123,13 @@ Logging Threads:
 
 The GUI is written using the Qt suite for C++. It has the ability to interact with the backtester with stop/start/restart buttons, and supports interactive scrolling and zooming of the price and PNL charts. We also include a trade log along with a window that displays orderbook data, and markers on the price chart for the trades our strategy has executed.
 
+Visualization: https://www.youtube.com/shorts/Nl-m4L0scYs
+
 Features include:
 - Real-time price charts with Bid/Ask visualization
 - P&L performance tracking
 - Interactive zoom/scroll functionality
 - Trade execution markers
-- Order book depth display
-- Strategy control panel
 
 ### Charts
 - Price chart with bid/ask spread
@@ -158,7 +158,6 @@ Features include:
 ### Database
 - Asynchronous write operations
 - Batch processing for snapshots
-- Efficient indexing strategies`
 
 
 ## 📖 References 
