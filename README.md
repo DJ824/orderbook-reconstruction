@@ -76,7 +76,6 @@ Features:
 - Historical order imbalance training
 - QR decomposition for coefficient estimation
 - Configurable forecast windows
-- Mean reversion capture through lagged terms
 
 ## 🧵 Multi-threading Architecture
 
@@ -97,27 +96,7 @@ Logging Threads:
 - CSV Logger Thread - responsible for writing trade logs to a CSV file
 - Database Logger Thread - responsible for sending trade logs to the lock-free queue in the database class
 
-### Thread Overview
-
-1. **Main/GUI Thread**
-    - GUI event processing
-    - User interaction handling
-    - Chart updates
-
-2. **Backtester Thread**
-    - Market data processing
-    - Strategy execution
-    - Signal emission
-
-3. **Database Threads**
-    - Trade log persistence
-    - Orderbook snapshot storage
-    - Asynchronous writes
-
-4. **Logger Threads**
-    - Console output
-    - CSV file writing
-    - Database logging
+I am sure there is a better way to do this, need to study more on multithreading/lock-free programming. 
 
 ## 🖥️ GUI Components
 
@@ -163,4 +142,11 @@ Features include:
 ## 📖 References 
 - https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/ (orderbook design)
 - https://databento.com/docs/examples/algo-trading/high-frequency/book-skew-and-trading-rule (strategy pnl calculations)
-- https://www.scribd.com/document/360964571/Darryl-Shen-OrderImbalanceStrategy-pdf (linear regression model 
+- https://www.scribd.com/document/360964571/Darryl-Shen-OrderImbalanceStrategy-pdf (linear regression model)
+
+
+## ⏳ To Do
+- Add more functionality to the gui, such as choosing the strategy we want to test, along with the day. Right now everything is hard-coded. Also a way to store csv files online so that we can quickly parse the messages. Right now I am using mmap to quickly parse (8-12 million rows in 1-3 seconds). 
+- Improve the multithreading architecture. 
+- Maybe use vectors instead of maps to take advantage of cache locality for the orderbook. https://www.youtube.com/watch?v=sX2nF1fW7kI&t=2s idea from David Gross.
+- Expand the linear regression model to include mean reversion as detailed in the pdf.
