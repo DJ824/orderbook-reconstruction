@@ -1,83 +1,167 @@
-# High-Performance Orderbook 
+# High Frequency Trading Backtesting Suite 🚀
 
-This project implements a high-performance orderbook and backtesting framework suitable for algorithmic trading applications. The orderbook efficiently manages buy (bid) and sell (offer) orders, supporting operations like adding, modifying, and removing orders, as well as executing trades. This orderbook was built to process MBO data from databento, specifically for sp500 futures.
+This project implements a backtesting suite designed for MBO data from databento. The system is built with performance and real-time analysis in mind, featuring comprehensive orderbook management, strategy implementation, and visualization tools.
 
-## Implementation Details 
+[![C++](https://img.shields.io/badge/C++-17-blue.svg)](https://isocpp.org/)
+[![Qt](https://img.shields.io/badge/Qt-6.2+-green.svg)](https://www.qt.io/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-One thing I did differently was to include the action of market orders hitting the book. Along with a market order message, there is an addition order filled message that takes into account the effect of the market order on the limit orderbook. 
+A high-performance backtesting framework designed for high-frequency trading using Market by Order (MBO) data from Databento.
+
+## 🌟 Features
+
+- **High-Performance Orderbook Engine**
+- **Real-time Visualization Dashboard**
+- **Multi-threaded Architecture**
+- **Advanced Trading Strategies**
+- **Time Series Database Integration**
+- **Asynchronous Logging System**
+
+## 🏗️ Architecture
+
+### Order Book Implementation
+
+The orderbook is the key component of any trading/backtesting system, especially in high frequency scenarios. The system uses the following design:
+
+- An order object that represents individual order messages as received from the CME's matching engine. We use a struct to hold information such as order id, time received, price, quantity, and message type (add/modify/cancel/trade). In addition, we store pointers to order objects in a `std::unordered_map<uint64_t (order_id), order*>`, providing O(1) access to each individual order object.
+
+- A limit object, which is comprised of a doubly linked list of order objects. We use a doubly linked list for quick access to the first and last order in the queue. We use another `std::unordered_map<std::pair<int32_t, bool>, Limit *, boost::hash<std::pair<int32_t, bool>>>` to store pointers to limit objects (bool determines side). The cost/benefit of hashing the pair is still under evaluation.
+
+- The main orderbook is represented by 2 `std::map<uint32_t, limit*>`, one for the bid side and one for the ask side, for which we use templates to define.
+
+
+### Order Book Operations
+
+The orderbook supports the following core operations:
+
+- Add Order - adds a limit order to the orderbook, time complexity O(log(n)) worst case
+- Cancel Order - cancels an order from the orderbook, time complexity O(1) due to the unordered map we can just adjust the next and prev pointers
+- Modify Order - modifies an existing order, if the size has been increased and/or price changes, requeues the order, time complexity O(log(n)) worst case
+- Trade Order - executes a market order, time complexity O(log(n) + m) worst case
 
 <img width="769" alt="image" src="https://github.com/user-attachments/assets/8c2e4505-78e2-4374-b3e9-344ca1f85fb6">
 
-Over here we see a market trade message come in at timestamp ending at 11, side is Ask, at price 5300.25 for 2 lots. The next few messages sharing the same timestamp take into account what happens on the book when the market order takes place. We see that one order gets filled ending in order id 16, and the next gets filled at order id 17. We then see cancellation messages for those same id's at the same time, which shows the effect of the market order clearing the size of the limit order and removing from the book. Common implementations just read in the effect of the market order, but I thought it would be a fun challenge to implement market orders themselves. My implementation ignores the fill message, by reading in the trade message, making the action of the market order hit the book, then reading the cancellation message, removing the filled limit order. We accomplish 
-this by accessing the limit object that the price of the trade order represents, then iterating through the list of orders until all size of the market order has been depleted.
+Market Order Implementation:
+When a market trade message arrives, the system processes the complete order lifecycle. For example, when a market trade occurs at timestamp 11 on the Ask side at price 5300.25 for 2 lots, subsequent messages at the same timestamp reflect the orderbook updates. This includes fill messages for affected orders (e.g., order IDs 16 and 17) followed by cancellation messages for those same IDs. Rather than just reading the effect of the market order, the implementation actively processes the trade by accessing the relevant limit object and iterating through orders until the market order size is depleted.
 
-Update 08/30/24
-Added database integration (QuestDB using Influx Line Protocol) for book snapshots/message, gui to visualize the book using d3.js and web workers to improve performance, and a backtesting framework incorporating a 2 hft strategies based on book imbalance/skew and vwap.
-In addition, we use an asynchronous logger which uses 2 lock free queues to relay the results of the backtester, writing to std out and a csv file with a seperate thread for each. 
+### Time Complexity
 
-## Key Components
+| Operation | Complexity | Notes |
+|-----------|------------|-------|
+| Add Order | O(log n) | Worst case for new price level |
+| Cancel Order | O(1) | Using direct order pointer access |
+| Modify Order | O(log n) | Worst case for price change |
+| Trade Order | O(log n + m) | m = number of orders to match |
 
-1. `order`: Represents individual orders in the orderbook.
-2. `limit`: Represents a price level, containing a doubly linked list orders at that price.
-3. `orderbook`: The main class that manages the entire orderbook structure. 
+## 📊 Trading Strategies
 
-## Orderbook Operations and Time Complexities
+### 1. Order Imbalance Strategy
 
-### Add Limit Order
-- Function: `add_limit_order(uint64_t id, int32_t price, uint32_t size, bool side, uint64_t unix_time)`
-- Time Complexity: O(1) average case, O(log n) worst case when creating a new limit
-- Description: Adds a new limit order to the orderbook.
+The first strategy is an imbalance/vwap strategy. We calculate orderbook imbalance based on the first 20/40/80/x levels of each side of the order book, which is accomplished using SIMD instructions. We also calculate VWAP with every trade order message processed, and pass these values to the strategy, which executes a buy order if (imbalance > 0 && mid_price < vwap), and a sell order if (imbalance < 0 && mid_price > vwap).
 
-### Remove Order
-- Function: `remove_order(uint64_t id, int32_t price, uint32_t size, bool side)`
-- Time Complexity: O(1) average case, O(log n) worst case when removing a limit
-- Description: Removes an existing order from the orderbook.
+Key features:
+- SIMD-optimized imbalance calculation
+- Multi-level order book depth analysis
+- VWAP-based signal generation
 
-### Modify Order
-- Function: `modify_order(uint64_t id, int32_t new_price, uint32_t new_size, bool side, uint64_t unix_time)`
-- Time Complexity: O(1) average case, O(log n) worst case when creating or removing a limit
-- Description: Modifies an existing order in the orderbook. If quantity has been increased or if price has changed, reques the order. 
+### 2. Linear Regression Strategy
 
-### Trade Order
-- Function: `trade_order(uint64_t id, int32_t price, uint32_t size, bool side)`
-- Time Complexity: O(1) (accessing the limit object being executed on) + O(m) (number of orders to be filled)
-- Description: Executes a market order. Get the limit object that the market order executed on and iterate through the list of orders, filling them. 
+The second strategy is a linear regression model based strategy, which uses just one X variable for now: orderbook imbalance. This version takes the imbalance of the best bid and offer. We first fit the model by collecting data from the previous day, then construct our X and Y vectors. The data is collected every 1 second, and our model incorporates the last 5 seconds of data in making price predictions, which is stored in the X vector (independent variable).
 
-### Get or Insert Limit 
-- Function: `get_or_insert_limit(bool side, int32_t price);`
-- Time Complexity: O(1) average, worst case O(logn) when creating new limit objects to insert into maps 
-- Description: Gets a limit object for the requested price and side. We have an unordered_map that we use to store all current limit objects for fast access, if we have to create a new limit object, we store in the appropraite side. 
+We then calculate the average price change over the forecast window, which we can adjust to our choosing, storing this in the Y vector (dependent variable). We then run a QR decomposition on these vectors to solve for the coefficients, and store them to use in our strategy.
 
-## Data Structures Used
+The strategy uses these coefficients, along with the current orderbook imbalance as defined for this strat, and calculates a predicted price change. If the change is greater/less than our threshold (the minimum price change we want to see), a trade is executed.
 
-- `std::map<int32_t, limit*, std::greater<>>`: For storing bid price levels
-- `std::map<int32_t, limit*, std::less<>>`: For storing offer price levels
-- `std::unordered_map<uint64_t, order*>`: For quick order lookup by ID
-- `std::unordered_map<std::pair<int32_t, bool>, limit*, boost::hash<std::pair<int32_t, bool>>>`: For quick access to limit objects
+Features:
+- Historical order imbalance training
+- QR decomposition for coefficient estimation
+- Configurable forecast windows
+- Mean reversion capture through lagged terms
 
-## Performance 
-- process 8.2 million messages in ~2.7 seconds on M1 Max 32gb
-<img width="529" alt="image" src="https://github.com/user-attachments/assets/7d1d7624-f440-4297-bd78-bc0218d460f9">
+## 🧵 Multi-threading Architecture
 
-- Clion has a pretty cool profiling tool, which I used to optimize the performance.
- <img width="923" alt="image" src="https://github.com/user-attachments/assets/f483cfaf-81fe-4103-856b-de2130ac2f45">
-- We see here that dynamically allocating new orders in the add limit order function takes up a considerable amount of time, with this implementation the performance was around 5 seconds. I implemented an order pool, preallocating 1000000 orders in a vector, and by integrating it, was able to shave almost 50%.
-- 
-Update 09/5/24: Memory mapped the csv file and optimized the way we calculate the total bid and ask vol of the first 100 levels, total time to run the backtester including csv parsing is around ~8.2 seconds for a day's worth of market data (nyc open to close)
+### Multithreading Overview
 
-https://gifyu.com/image/S1vuT
+This application takes advantage of the power of multithreading in specific scenarios to improve performance. Here is the breakdown:
+
+Core Threads:
+- Main/GUI thread - responsible for GUI event processing and user interactions
+- Backtester thread - responsible for processing the market data messages, executing the trading strategy, and emitting signals to the GUI
+
+Database Management Threads:
+- Database Thread - responsible for sending trade logs to the database
+- Orderbook Thread - responsible for sending order book snapshots to the database (every 100 messages)
+
+Logging Threads:
+- Console Thread - responsible for sending trade logs to the console
+- CSV Logger Thread - responsible for writing trade logs to a CSV file
+- Database Logger Thread - responsible for sending trade logs to the lock-free queue in the database class
+
+### Thread Overview
+
+1. **Main/GUI Thread**
+    - GUI event processing
+    - User interaction handling
+    - Chart updates
+
+2. **Backtester Thread**
+    - Market data processing
+    - Strategy execution
+    - Signal emission
+
+3. **Database Threads**
+    - Trade log persistence
+    - Orderbook snapshot storage
+    - Asynchronous writes
+
+4. **Logger Threads**
+    - Console output
+    - CSV file writing
+    - Database logging
+
+## 🖥️ GUI Components
+
+The GUI is written using the Qt suite for C++. It has the ability to interact with the backtester with stop/start/restart buttons, and supports interactive scrolling and zooming of the price and PNL charts. We also include a trade log along with a window that displays orderbook data, and markers on the price chart for the trades our strategy has executed.
+
+Features include:
+- Real-time price charts with Bid/Ask visualization
+- P&L performance tracking
+- Interactive zoom/scroll functionality
+- Trade execution markers
+- Order book depth display
+- Strategy control panel
+
+### Charts
+- Price chart with bid/ask spread
+- Volume analysis
+- P&L visualization
+- Trade markers for strategy execution points
+
+### Controls
+- Start/Stop/Restart functionality
+- Parameter adjustment interface
+- Real-time statistics display
 
 
-## Future Plans 
-- Gui to visualize the book - done
-- Backtesting framework to test hft strats - done
-- Add support for multiple instruments like nq, zn, to run strats across them - todo 
-- Visualize the results of the strategies - todo
-- Optimization via low latency techniques - todo 
+## 📈 Performance Optimization
 
-## Visualization 
-https://youtu.be/Nl-m4L0scYs
+### Memory Management
+- Lock-free queues for inter-thread communication
+- Object pools for Order and Limit objects
+- Efficient memory allocation patterns
+
+### Computation
+- SIMD instructions for orderbook calculations
+- O(1) order access via hash maps
+- Optimized price level management
+
+### Database
+- Asynchronous write operations
+- Batch processing for snapshots
+- Efficient indexing strategies`
 
 
-
-
+## 📖 References 
+- https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/ (orderbook design)
+- https://databento.com/docs/examples/algo-trading/high-frequency/book-skew-and-trading-rule (strategy pnl calculations)
+- https://www.scribd.com/document/360964571/Darryl-Shen-OrderImbalanceStrategy-pdf (linear regression model 
