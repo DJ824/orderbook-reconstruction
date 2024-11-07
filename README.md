@@ -6,8 +6,6 @@ This project implements a backtesting suite designed for MBO data from databento
 [![Qt](https://img.shields.io/badge/Qt-6.2+-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A high-performance backtesting framework designed for high-frequency trading using Market by Order (MBO) data from Databento.
-
 ## 🌟 Features
 
 - **High-Performance Orderbook Engine**
