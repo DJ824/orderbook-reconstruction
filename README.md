@@ -1,4 +1,4 @@
-# High Frequency Trading Backtesting Suite 🚀
+# High Frequency Trading Backtesting Suite 
 
 This project implements a backtesting suite designed for MBO data from databento. The system is built with performance and real-time analysis in mind, featuring comprehensive orderbook management, strategy implementation, and visualization tools.
 
