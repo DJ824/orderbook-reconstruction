@@ -66,7 +66,7 @@ Key features:
 
 The second strategy is a linear regression model based strategy, which uses just one X variable for now: orderbook imbalance. This version takes the imbalance of the best bid and offer. We first fit the model by collecting data from the previous day, then construct our X and Y vectors. The data is collected every 1 second, and our model incorporates the last 5 seconds of data in making price predictions, which is stored in the X vector (independent variable).
 
-We then calculate the average price change over the forecast window, which we can adjust to our choosing, storing this in the Y vector (dependent variable). We then run a QR decomposition on these vectors to solve for the coefficients, and store them to use in our strategy.
+We calculate the average price change over the forecast window, which we can adjust to our choosing, storing this in the Y vector (dependent variable), then run a QR decomposition on these vectors to solve for the coefficients, and store them to use in our strategy.
 
 The strategy uses these coefficients, along with the current orderbook imbalance as defined for this strat, and calculates a predicted price change. If the change is greater/less than our threshold (the minimum price change we want to see), a trade is executed.
 
